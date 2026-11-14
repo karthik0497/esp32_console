@@ -383,3 +383,54 @@ th { color: var(--text-muted); font-size: 12px; font-weight: 600; }
   .sidebar { flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }
   .files-layout, .xray-body { grid-template-columns: 1fr; }
 }
+
+/* -------------------- Dedicated Connection Status Box -------------------- */
+.connection-status-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  margin-top: 14px;
+  transition: all 0.2s ease;
+}
+.connection-status-box.connected {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+.connection-status-box.disconnected {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: var(--border);
+}
+.status-indicator-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+.connection-status-box.connected .status-indicator-dot {
+  background: var(--green);
+  box-shadow: 0 0 10px var(--green);
+}
+.status-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.status-details strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.connection-status-box.connected .status-details strong {
+  color: var(--green);
+}
+.status-details span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+

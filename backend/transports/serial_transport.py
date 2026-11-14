@@ -25,7 +25,6 @@ def list_serial_ports() -> list[dict]:
     """Return available serial ports enriched with ESP32 hardware hints."""
     ports = []
     for p in serial.tools.list_ports.comports():
-        # Filter out empty Linux /dev/ttyS* dummy ports
         if p.device.startswith("/dev/ttyS") and (not p.hwid or p.hwid == "n/a"):
             continue
         vid_pid = (p.vid, p.pid) if p.vid is not None and p.pid is not None else None
