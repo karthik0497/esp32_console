@@ -1,218 +1,138 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Active-Learning Console</title>
-  <link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Active-Learning Console — Clean Workbench</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
-  <div class="app-layout">
-    <!-- Sidebar -->
+<div class="app-shell">
+
+  <!-- TOP NAVBAR -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">ESP</div>
+      <div>
+        <h1>ESP32 Active-Learning Console</h1>
+        <small>MicroPython Control &bull; Serial Terminal &bull; Multi-Language Flasher</small>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <span id="statusPill" class="status-pill state-DISCONNECTED">
+        <span class="dot"></span>
+        <span id="statusText">Disconnected</span>
+      </span>
+      <button type="button" id="themeToggleBtn" class="btn btn-sm btn-subtle" title="Toggle Light/Dark Theme">🌓 Theme</button>
+      <a class="btn btn-sm btn-subtle" href="/guide" target="_blank" title="Open Illustrated Guide">📖 Guide</a>
+    </div>
+  </header>
+
+  <!-- ALERT BANNER -->
+  <div id="alertBanner" class="alert-banner hidden">
+    <div id="alertText"></div>
+    <button type="button" id="dismissAlertBtn" class="btn btn-sm">Dismiss</button>
+  </div>
+
+  <!-- WORKSPACE WITH SIDEBAR -->
+  <div class="workspace">
+    <!-- Clean Sidebar Navigation -->
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo-badge">ESP</div>
-        <div>
-          <h1 class="sidebar-title">ESP32 Console</h1>
-          <p class="sidebar-sub">Active-Learning Console</p>
-        </div>
-      </div>
-
-      <!-- Navigation Menu -->
-      <nav class="nav-menu">
-        <a class="nav-item active" id="nav-initial-setup" href="#initial-setup">
-          <div class="nav-item-left">
-            <span class="nav-icon">🛠️</span>
-            <span>Initial Setup</span>
-          </div>
-          <span class="step-badge">Step 1</span>
-        </a>
-
-        <div class="nav-item disabled" id="nav-communication" title="Available in Step 2 after Initial Setup">
-          <div class="nav-item-left">
-            <span class="nav-icon">🔌</span>
-            <span>Communication</span>
-          </div>
-          <span class="step-badge">Step 2</span>
-        </div>
-
-        <div class="nav-item disabled" id="nav-filesystem" title="Available in Step 3">
-          <div class="nav-item-left">
-            <span class="nav-icon">📁</span>
-            <span>File System</span>
-          </div>
-          <span class="step-badge">Step 3</span>
-        </div>
-
-        <div class="nav-item disabled" id="nav-memory" title="Available in Step 4">
-          <div class="nav-item-left">
-            <span class="nav-icon">📊</span>
-            <span>Memory &amp; System</span>
-          </div>
-          <span class="step-badge">Step 4</span>
-        </div>
-      </nav>
-
-      <!-- Sidebar Footer -->
-      <div class="sidebar-footer">
-        <div id="statusBadge" class="status-badge disconnected">
-          <span class="status-dot"></span>
-          <span id="statusText">Disconnected</span>
-        </div>
-        <button id="themeToggleBtn" class="btn btn-icon btn-secondary" title="Toggle Light/Dark Theme">🌓</button>
-      </div>
+      <button type="button" class="nav-item active" data-tab="tab-terminal">
+        <span class="nav-icon">🔌</span> 1. USB Connection
+      </button>
+      <button type="button" class="nav-item" data-tab="tab-files">
+        <span class="nav-icon">📁</span> 2. Files &amp; Deploy
+      </button>
+      <button type="button" class="nav-item" data-tab="tab-wifi">
+        <span class="nav-icon">📶</span> 3. Wi-Fi &amp; WebREPL
+      </button>
+      <button type="button" class="nav-item" data-tab="tab-metrics">
+        <span class="nav-icon">⚡</span> 4. Metrics &amp; Health
+      </button>
+      <button type="button" class="nav-item" data-tab="tab-flash">
+        <span class="nav-icon">🔥</span> 5. Flash Firmware
+      </button>
     </aside>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-      <!-- Step 1 View: ESP32 Initial Setup -->
-      <section id="view-initial-setup">
-        <div class="page-header">
-          <h2 class="page-title">ESP32 Initial Setup &amp; Firmware Preparation</h2>
-          <p class="page-desc">Detect your physical ESP32 board, probe silicon specs and MAC address, and flash MicroPython firmware.</p>
-        </div>
+    <!-- Main Content Area: All Tabs Empty, Ready to Add Options One by One -->
+    <main class="main-area">
+      <div class="tab-content">
 
-        <!-- Card 1: Port Detection & Hardware Probe -->
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>1. Hardware Detection &amp; Silicon Probe</h2>
-              <div class="card-subtitle">Connect to the ROM bootloader to verify silicon model, flash capacity, and MAC address.</div>
+        <!-- TAB 1: USB CONNECTION (Clean & Empty, Ready for Feature Addition) -->
+        <section id="tab-terminal" class="tab-pane active">
+          <div class="card">
+            <div class="card-title">
+              <span>🔌 1. USB Connection</span>
+            </div>
+            <div id="terminalTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
+              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add USB Connection features</p>
+              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Tell me what options to add here first (e.g. port selector, connect button, serial monitor).</p>
             </div>
           </div>
+        </section>
 
-          <div class="form-row">
-            <!-- Port Selector -->
-            <div class="form-group flex-2">
-              <label for="portSelect">Detected Serial Port</label>
-              <div class="input-with-button">
-                <select id="portSelect" class="select-input">
-                  <option value="">Scanning for ESP32 boards...</option>
-                </select>
-                <button id="refreshPortsBtn" class="btn btn-secondary" title="Scan for newly plugged ESP32 boards">
-                  🔄 Refresh
-                </button>
-              </div>
+        <!-- TAB 2: FILES & DEPLOY (Clean & Empty) -->
+        <section id="tab-files" class="tab-pane">
+          <div class="card">
+            <div class="card-title">
+              <span>📁 2. Files &amp; Deploy</span>
             </div>
-
-            <!-- Probe Baud Rate -->
-            <div class="form-group flex-1">
-              <label for="probeBaudSelect">Probe Baud Rate</label>
-              <select id="probeBaudSelect" class="select-input">
-                <option value="115200" selected>115200 (Default)</option>
-                <option value="460800">460800 (Fast)</option>
-              </select>
-            </div>
-
-            <!-- Probe Button -->
-            <div class="form-group btn-col">
-              <label>&nbsp;</label>
-              <button id="probeBtn" class="btn btn-primary">🔍 Probe Hardware</button>
+            <div id="filesTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
+              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add File System features</p>
+              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Directory tree, file editor, and upload/download options will be added here.</p>
             </div>
           </div>
+        </section>
 
-          <!-- Specs Tiles -->
-          <div class="specs-grid" id="specsGrid">
-            <div class="spec-tile">
-              <div class="spec-label">Chip Silicon</div>
-              <div class="spec-value" id="specChip">Not Probed Yet</div>
+        <!-- TAB 3: WI-FI & WEBREPL (Clean & Empty) -->
+        <section id="tab-wifi" class="tab-pane">
+          <div class="card">
+            <div class="card-title">
+              <span>📶 3. Wi-Fi &amp; WebREPL</span>
             </div>
-            <div class="spec-tile">
-              <div class="spec-label">MAC Address</div>
-              <div class="spec-value" id="specMac">--:--:--:--:--:--</div>
-            </div>
-            <div class="spec-tile">
-              <div class="spec-label">Flash Memory Size</div>
-              <div class="spec-value" id="specFlash">-- MB</div>
-            </div>
-            <div class="spec-tile">
-              <div class="spec-label">Crystal Oscillator</div>
-              <div class="spec-value" id="specCrystal">-- MHz</div>
+            <div id="wifiTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
+              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add Wi-Fi &amp; WebREPL features</p>
+              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Wi-Fi scanning, station connection, AP fallback, and WebREPL setup will be added here.</p>
             </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Card 2: Firmware Flashing -->
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <h2>2. MicroPython Firmware Installation</h2>
-              <div class="card-subtitle">Flash standard MicroPython v1.24.1 into your ESP32 SPI flash memory.</div>
+        <!-- TAB 4: METRICS & HEALTH (Clean & Empty) -->
+        <section id="tab-metrics" class="tab-pane">
+          <div class="card">
+            <div class="card-title">
+              <span>⚡ 4. Metrics &amp; Health</span>
+            </div>
+            <div id="metricsTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
+              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add Metrics &amp; Health features</p>
+              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">RAM free/used, CPU frequency, uptime, and system diagnostics will be added here.</p>
             </div>
           </div>
+        </section>
 
-          <!-- Flasher Options -->
-          <div class="flasher-options">
-            <div class="form-row">
-              <div class="form-group flex-2">
-                <label for="firmwareSourceSelect">Firmware Source</label>
-                <select id="firmwareSourceSelect" class="select-input">
-                  <option value="bundled" selected>⚡ Bundled MicroPython v1.24.1 (ESP32 Generic 4MB)</option>
-                  <option value="custom">📂 Upload Custom .bin File</option>
-                </select>
-              </div>
-
-              <div class="form-group flex-1">
-                <label for="flashBaudSelect">Flashing Speed</label>
-                <select id="flashBaudSelect" class="select-input">
-                  <option value="460800" selected>460800 baud (Recommended)</option>
-                  <option value="115200">115200 baud (Safe / Long cables)</option>
-                  <option value="921600">921600 baud (High speed)</option>
-                </select>
-              </div>
+        <!-- TAB 5: FLASH FIRMWARE (Clean & Empty) -->
+        <section id="tab-flash" class="tab-pane">
+          <div class="card">
+            <div class="card-title">
+              <span>🔥 5. Flash Firmware</span>
             </div>
-
-            <!-- Custom File Input (Hidden by default) -->
-            <div id="customFileSection" class="form-row" style="display: none;">
-              <div class="form-group flex-2">
-                <label for="customBinFile">Select .bin Firmware File</label>
-                <input type="file" id="customBinFile" class="select-input" accept=".bin" />
-              </div>
-              <div class="form-group flex-1">
-                <label for="customOffset">Flash Memory Offset</label>
-                <input type="text" id="customOffset" class="select-input" value="0x1000" />
-              </div>
-            </div>
-
-            <label class="checkbox-label">
-              <input type="checkbox" id="eraseFirstCheck" checked />
-              <span>Erase entire flash memory first (Clean wipe prevents corrupt partitions)</span>
-            </label>
-
-            <!-- Action Buttons -->
-            <div class="flash-actions">
-              <button id="flashBtn" class="btn btn-primary">⚡ Install MicroPython</button>
-              <button id="eraseOnlyBtn" class="btn btn-danger">🧹 Wipe Flash Only</button>
-            </div>
-
-            <!-- Progress Bar -->
-            <div class="progress-container" id="progressContainer">
-              <div class="progress-bar-wrap">
-                <div class="progress-bar-fill" id="progressBarFill"></div>
-              </div>
-              <div class="progress-text">
-                <span id="progressStatusText">Preparing esptool...</span>
-                <span id="progressPercentText">0%</span>
-              </div>
-            </div>
-
-            <!-- Flasher Log -->
-            <div class="log-screen" id="flasherLog" style="display: none;"></div>
-
-            <!-- Success Banner -->
-            <div class="success-banner" id="flashSuccessBanner">
-              <div>
-                <div class="success-title">✅ MicroPython Firmware Successfully Installed!</div>
-                <div class="success-desc">The ESP32 has been prepared and restarted. You are ready to proceed to Step 2: Communication.</div>
-              </div>
+            <div id="flashTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
+              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add Flash Firmware features</p>
+              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Chip detection, ROM probe, 1-click MicroPython install, and custom flasher will be added here.</p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+
+      </div>
     </main>
   </div>
 
-  <script src="/static/js/app.js"></script>
+  <div id="toastContainer" class="toast-container"></div>
+</div>
+
+<script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -184,7 +184,7 @@ def test_websocket_terminal_and_xray():
 
 
 def test_info_buttons_coverage_in_html():
-    """Verify any data-info keys in index.html have definitions if learning.js is present."""
+    """Verify data-info keys in index.html exist inside learning.js if present."""
     import re
     from pathlib import Path
 
