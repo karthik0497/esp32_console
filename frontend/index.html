@@ -63,20 +63,27 @@
 
         <!-- TAB 1: USB CONNECTION -->
         <section id="tab-terminal" class="tab-pane active">
+
+          <!-- 1. Dedicated USB Connection Card -->
           <div class="card connection-hero-card">
             <div class="card-title">
-              <span>🔌 1. USB Connection</span>
+              <span>🔌 Device Connection</span>
+              <div class="control-group">
+                <span class="field-label-inline">Mode:</span>
+                <select id="connMode" class="input input-sm" title="Connection Mode">
+                  <option value="serial" selected>USB Serial Cable</option>
+                  <option value="webrepl">Wi-Fi WebREPL</option>
+                </select>
+              </div>
             </div>
 
             <!-- Form: Port, Baud, and Connect -->
             <div class="connect-form-grid">
-              <div class="serial-inputs-group">
+              <div id="serialInputs" class="serial-inputs-group">
                 <div class="input-col port-col">
-                  <label class="field-label" for="portSelect">Target Serial Port:</label>
+                  <label class="field-label" for="portSelect">Target Port:</label>
                   <div class="port-select-row">
-                    <select id="portSelect" class="input flex-1">
-                      <option value="">Scanning for ports...</option>
-                    </select>
+                    <select id="portSelect" class="input flex-1"></select>
                     <button type="button" id="refreshPortsBtn" class="btn btn-sm" title="Refresh USB Ports">↻ Refresh</button>
                   </div>
                 </div>
@@ -85,13 +92,25 @@
                   <label class="field-label" for="baudSelect">Baud Rate:</label>
                   <select id="baudSelect" class="input">
                     <option value="115200" selected>115200 baud</option>
+                    <option value="74880">74880 baud (Boot)</option>
                     <option value="9600">9600 baud</option>
                     <option value="57600">57600 baud</option>
-                    <option value="74880">74880 baud (Boot ROM)</option>
                     <option value="230400">230400 baud</option>
                     <option value="460800">460800 baud</option>
                     <option value="921600">921600 baud</option>
                   </select>
+                </div>
+              </div>
+
+              <!-- WebREPL Inputs (Hidden unless WebREPL mode chosen) -->
+              <div id="webreplInputs" class="webrepl-inputs-group" style="display:none">
+                <div class="input-col port-col">
+                  <label class="field-label" for="webreplHostInput">ESP32 IP Address:</label>
+                  <input id="webreplHostInput" class="input" placeholder="e.g. 192.168.1.142" />
+                </div>
+                <div class="input-col baud-col">
+                  <label class="field-label" for="webreplPassInput">WebREPL Password:</label>
+                  <input id="webreplPassInput" class="input" type="password" value="1234" placeholder="4–9 chars" />
                 </div>
               </div>
 
@@ -101,12 +120,15 @@
               </div>
             </div>
 
-            <!-- Prominent Connection Status Box (Connected / Not Connected) -->
-            <div id="connectionStatusBox" class="connection-status-box disconnected">
-              <span class="status-indicator-dot"></span>
-              <div class="status-details">
-                <strong id="connectionStateLabel">Not Connected</strong>
-                <span id="connectionStateHint">Select your serial port (e.g. /dev/ttyUSB0) and click Connect.</span>
+            <!-- Board Controls Bar -->
+            <div class="board-controls-strip">
+              <span class="strip-label">Execution Controls:</span>
+              <div class="control-group">
+                <button type="button" id="stopBtn" class="btn btn-sm btn-warn" disabled>Stop (Ctrl+C)</button>
+                <button type="button" id="softResetBtn" class="btn btn-sm" disabled>Soft Reboot</button>
+                <button type="button" id="hardResetBtn" class="btn btn-sm" disabled>Hard Reset</button>
+                <button type="button" id="safeRecoveryBtn" class="btn btn-sm btn-danger" disabled>Safe Recovery</button>
+                <button type="button" id="forceStopBtn" class="btn btn-sm btn-danger" disabled>Force Stop</button>
               </div>
             </div>
           </div>
