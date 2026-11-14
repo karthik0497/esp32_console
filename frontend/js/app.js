@@ -1,43 +1,40 @@
 /**
- * ESP32 Web Console - Step 1: USB Serial Connection & Serial Monitor
+ * ESP32 Web Console - Step 1: ESP32 Initial Setup & Firmware Preparation
  */
 
-// UI Elements
+// DOM Elements - Port & Probe
 const portSelect = document.getElementById("portSelect");
-const baudRateSelect = document.getElementById("baudRateSelect");
 const refreshPortsBtn = document.getElementById("refreshPortsBtn");
-const connectBtn = document.getElementById("connectBtn");
-const stopBtn = document.getElementById("stopBtn");
-const softResetBtn = document.getElementById("softResetBtn");
-const resetBtn = document.getElementById("resetBtn");
-const clearTermBtn = document.getElementById("clearTermBtn");
-const terminal = document.getElementById("terminal");
-const cmdForm = document.getElementById("cmdForm");
-const cmdInput = document.getElementById("cmdInput");
-const sendBtn = document.getElementById("sendBtn");
+const probeBaudSelect = document.getElementById("probeBaudSelect");
+const probeBtn = document.getElementById("probeBtn");
+const specChip = document.getElementById("specChip");
+const specMac = document.getElementById("specMac");
+const specFlash = document.getElementById("specFlash");
+const specCrystal = document.getElementById("specCrystal");
+
+// DOM Elements - Flashing
+const firmwareSourceSelect = document.getElementById("firmwareSourceSelect");
+const flashBaudSelect = document.getElementById("flashBaudSelect");
+const customFileSection = document.getElementById("customFileSection");
+const customBinFile = document.getElementById("customBinFile");
+const customOffset = document.getElementById("customOffset");
+const eraseFirstCheck = document.getElementById("eraseFirstCheck");
+const flashBtn = document.getElementById("flashBtn");
+const eraseOnlyBtn = document.getElementById("eraseOnlyBtn");
+
+const progressContainer = document.getElementById("progressContainer");
+const progressBarFill = document.getElementById("progressBarFill");
+const progressStatusText = document.getElementById("progressStatusText");
+const progressPercentText = document.getElementById("progressPercentText");
+const flasherLog = document.getElementById("flasherLog");
+const flashSuccessBanner = document.getElementById("flashSuccessBanner");
+
+// DOM Elements - Sidebar & Theme
 const statusBadge = document.getElementById("statusBadge");
 const statusText = document.getElementById("statusText");
-const termStatus = document.getElementById("termStatus");
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 
-// State
-let isConnected = false;
 let ws = null;
-let commandHistory = [];
-let historyIndex = -1;
-
-// -------------------- Terminal Functions --------------------
-
-function appendTerminal(text) {
-  if (!text) return;
-  terminal.textContent += text;
-  // Keep scroll pinned to bottom
-  terminal.scrollTop = terminal.scrollHeight;
-}
-
-function clearTerminal() {
-  terminal.textContent = "";
-}
 
 // -------------------- Port Discovery --------------------
 
@@ -53,26 +50,18 @@ async function fetchPorts() {
     portSelect.innerHTML = "";
 
     const ports = data.ports || [];
-    if (ports.length === 0 && !data.simulator) {
-      portSelect.innerHTML = `<option value="">No serial devices detected</option>`;
-      return;
-    }
+    let defaultPort = "";
 
-    let defaultOption = "";
-
-    // Real serial ports
     ports.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.port;
-      const label = `${p.port} - ${p.chip_hint || p.description || "Serial Device"}`;
-      opt.textContent = label;
-      if (p.likely_esp32 && !defaultOption) {
-        defaultOption = p.port;
+      opt.textContent = `${p.port} - ${p.chip_hint || p.description || "Serial Device"}`;
+      if (p.likely_esp32 && !defaultPort) {
+        defaultPort = p.port;
       }
       portSelect.appendChild(opt);
     });
 
-    // Built-in Simulator
     if (data.simulator) {
       const simOpt = document.createElement("option");
       simOpt.value = data.simulator.port;
@@ -80,203 +69,243 @@ async function fetchPorts() {
       portSelect.appendChild(simOpt);
     }
 
-    // Preserve previously selected port or choose likely ESP32
     if (previousVal && Array.from(portSelect.options).some((o) => o.value === previousVal)) {
       portSelect.value = previousVal;
-    } else if (defaultOption) {
-      portSelect.value = defaultOption;
+    } else if (defaultPort) {
+      portSelect.value = defaultPort;
     }
 
-    termStatus.textContent = `${ports.length} port(s) detected`;
+    updateStatusBadge(portSelect.value ? "Ready to Probe" : "No Board Detected", false);
   } catch (err) {
-    console.error("Failed to fetch ports:", err);
+    console.error("Port discovery error:", err);
     portSelect.innerHTML = `<option value="">Error scanning ports</option>`;
-    termStatus.textContent = "Error scanning ports";
   } finally {
     refreshPortsBtn.disabled = false;
     refreshPortsBtn.textContent = "🔄 Refresh";
   }
 }
 
-// -------------------- Connection Management --------------------
+// -------------------- Chip Silicon Probe --------------------
 
-function setConnectionState(connected, target = "") {
-  isConnected = connected;
+async function probeHardware() {
+  const port = portSelect.value;
+  if (!port) {
+    alert("Please select a serial port first.");
+    return;
+  }
+  const baud = parseInt(probeBaudSelect.value, 10) || 115200;
 
-  if (connected) {
-    statusBadge.className = "status-badge connected";
-    statusText.textContent = `Connected: ${target || "ESP32"}`;
-    connectBtn.textContent = "Disconnect";
-    connectBtn.className = "btn btn-danger";
+  try {
+    probeBtn.disabled = true;
+    probeBtn.textContent = "Probing...";
+    specChip.textContent = "Detecting...";
+    specMac.textContent = "Reading...";
+    specFlash.textContent = "Checking...";
+    specCrystal.textContent = "Checking...";
 
-    portSelect.disabled = true;
-    baudRateSelect.disabled = true;
-    refreshPortsBtn.disabled = true;
+    const res = await fetch("/api/flash/probe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port, baud }),
+    });
 
-    stopBtn.disabled = false;
-    softResetBtn.disabled = false;
-    resetBtn.disabled = false;
-    cmdInput.disabled = false;
-    sendBtn.disabled = false;
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Probe failed");
+    }
 
-    termStatus.textContent = `Active stream: ${target}`;
-    cmdInput.focus();
-  } else {
-    statusBadge.className = "status-badge disconnected";
-    statusText.textContent = "Disconnected";
-    connectBtn.textContent = "Connect";
-    connectBtn.className = "btn btn-primary";
+    specChip.textContent = data.chip || "ESP32";
+    specMac.textContent = data.mac || "Unknown";
+    specFlash.textContent = data.flash_size || "Unknown";
+    specCrystal.textContent = data.crystal || "40MHz";
 
-    portSelect.disabled = false;
-    baudRateSelect.disabled = false;
-    refreshPortsBtn.disabled = false;
-
-    stopBtn.disabled = true;
-    softResetBtn.disabled = true;
-    resetBtn.disabled = true;
-    cmdInput.disabled = true;
-    sendBtn.disabled = true;
-
-    termStatus.textContent = "Terminal Ready (Offline)";
+    updateStatusBadge(`Probed: ${data.chip}`, true);
+  } catch (err) {
+    alert(`Hardware probe failed: ${err.message}\n\nTip: On some boards, hold the 'BOOT' button while clicking Probe.`);
+    specChip.textContent = "Probe Failed";
+    specMac.textContent = "--";
+    specFlash.textContent = "--";
+    specCrystal.textContent = "--";
+    updateStatusBadge("Probe Failed", false);
+  } finally {
+    probeBtn.disabled = false;
+    probeBtn.textContent = "🔍 Probe Hardware";
   }
 }
 
-async function handleConnectToggle() {
-  if (isConnected) {
-    // Disconnect
-    try {
-      connectBtn.disabled = true;
-      connectBtn.textContent = "Disconnecting...";
-      await fetch("/api/disconnect", { method: "POST" });
-      appendTerminal("\n[System] Disconnected from device.\n");
-    } catch (err) {
-      console.error("Disconnect error:", err);
-    } finally {
-      connectBtn.disabled = false;
-      setConnectionState(false);
-    }
+// -------------------- Flasher UI Helpers --------------------
+
+function setProgress(pct, status) {
+  progressContainer.classList.add("active");
+  flasherLog.style.display = "block";
+  if (pct !== null && pct !== undefined) {
+    const clamped = Math.max(0, Math.min(100, pct));
+    progressBarFill.style.width = `${clamped}%`;
+    progressPercentText.textContent = `${clamped}%`;
+  }
+  if (status) {
+    progressStatusText.textContent = status;
+  }
+}
+
+function appendLog(line) {
+  if (!line) return;
+  flasherLog.textContent += line + "\n";
+  flasherLog.scrollTop = flasherLog.scrollHeight;
+}
+
+function clearLog() {
+  flasherLog.textContent = "";
+  flashSuccessBanner.classList.remove("active");
+}
+
+// -------------------- Firmware Flashing --------------------
+
+firmwareSourceSelect.addEventListener("change", () => {
+  if (firmwareSourceSelect.value === "custom") {
+    customFileSection.style.display = "flex";
+    flashBtn.textContent = "⚡ Flash Custom Firmware";
   } else {
-    // Connect
-    const target = portSelect.value;
-    if (!target) {
-      alert("Please select a valid serial port or SIMULATOR first.");
-      return;
-    }
-    const baudrate = parseInt(baudRateSelect.value, 10) || 115200;
-    const mode = target === "SIMULATOR" ? "simulator" : "serial";
+    customFileSection.style.display = "none";
+    flashBtn.textContent = "⚡ Install MicroPython";
+  }
+});
 
-    try {
-      connectBtn.disabled = true;
-      connectBtn.textContent = "Connecting...";
+async function handleFlash() {
+  const port = portSelect.value;
+  if (!port) {
+    alert("Please select a serial port first.");
+    return;
+  }
+  const baud = parseInt(flashBaudSelect.value, 10) || 460800;
+  const eraseFirst = eraseFirstCheck.checked;
+  const source = firmwareSourceSelect.value;
 
-      const res = await fetch("/api/connect", {
+  clearLog();
+  setProgress(5, "Initializing esptool flasher...");
+
+  try {
+    flashBtn.disabled = true;
+    eraseOnlyBtn.disabled = true;
+    probeBtn.disabled = true;
+
+    if (source === "bundled") {
+      appendLog(`[Flasher] Starting 1-click MicroPython installation on ${port}...`);
+      appendLog(`[Flasher] Speed: ${baud} baud | Erase first: ${eraseFirst}\n`);
+
+      const res = await fetch("/api/flash/install-bundled-micropython", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, target, baudrate }),
+        body: JSON.stringify({ port, baud, erase_first: eraseFirst }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || "Connection failed");
+        throw new Error(data.detail || "Flashing failed");
       }
 
-      appendTerminal(`\n[System] Connected to ${target} @ ${baudrate} baud.\n`);
-      setConnectionState(true, target);
-      initWebSocket();
-    } catch (err) {
-      alert(`Connection failed: ${err.message}`);
-      appendTerminal(`\n[System Error] ${err.message}\n`);
-      setConnectionState(false);
-    } finally {
-      connectBtn.disabled = false;
-    }
-  }
-}
+      setProgress(100, "Installation Complete!");
+      flashSuccessBanner.classList.add("active");
+      updateStatusBadge("MicroPython Ready", true);
+    } else {
+      // Custom firmware upload
+      const file = customBinFile.files[0];
+      if (!file) {
+        alert("Please select a .bin firmware file to upload.");
+        return;
+      }
+      const offset = customOffset.value.trim() || "0x1000";
 
-// -------------------- Control Actions --------------------
+      appendLog(`[Flasher] Flashing custom file '${file.name}' at offset ${offset}...`);
+      const form = new FormData();
+      form.append("port", port);
+      form.append("chip", "auto");
+      form.append("baud", baud.toString());
+      form.append("erase_first", eraseFirst.toString());
+      form.append("offsets_json", JSON.stringify([offset]));
+      form.append("files", file);
 
-async function sendControlAction(action) {
-  if (!isConnected) return;
-  try {
-    const res = await fetch(`/api/control/${action}`, { method: "POST" });
-    if (!res.ok) {
+      const res = await fetch("/api/flash/write", { method: "POST", body: form });
       const data = await res.json();
-      throw new Error(data.detail || "Action failed");
+      if (!res.ok) {
+        throw new Error(data.detail || "Flashing failed");
+      }
+
+      setProgress(100, "Custom Flash Complete!");
+      flashSuccessBanner.classList.add("active");
     }
   } catch (err) {
-    appendTerminal(`\n[Control Error] ${err.message}\n`);
+    appendLog(`\n[Flasher Error] ${err.message}`);
+    alert(`Flashing error: ${err.message}\n\nTip: Hold the BOOT button on your ESP32 board while flashing starts.`);
+    setProgress(null, "Flashing Failed");
+  } finally {
+    flashBtn.disabled = false;
+    eraseOnlyBtn.disabled = false;
+    probeBtn.disabled = false;
   }
 }
 
-// -------------------- Terminal Command Input --------------------
-
-function handleCommandSubmit(e) {
-  if (e) e.preventDefault();
-  const text = cmdInput.value;
-  if (!isConnected) return;
-
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "input", data: text + "\r\n" }));
+async function handleEraseOnly() {
+  const port = portSelect.value;
+  if (!port) {
+    alert("Please select a serial port first.");
+    return;
+  }
+  if (!confirm(`Are you sure you want to completely wipe the flash memory of ${port}?\nAll stored files and firmware will be erased.`)) {
+    return;
   }
 
-  if (text.trim()) {
-    commandHistory.push(text);
-    historyIndex = commandHistory.length;
+  const baud = parseInt(flashBaudSelect.value, 10) || 460800;
+  clearLog();
+  setProgress(10, "Erasing flash memory...");
+
+  try {
+    flashBtn.disabled = true;
+    eraseOnlyBtn.disabled = true;
+    probeBtn.disabled = true;
+
+    appendLog(`[Flasher] Erasing entire flash on ${port} @ ${baud} baud...`);
+    const res = await fetch("/api/flash/erase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port, baud }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Erase failed");
+    }
+
+    setProgress(100, "Erase Complete!");
+    appendLog("\n[Flasher] Chip erase completed successfully. The board is now completely clean.");
+  } catch (err) {
+    appendLog(`\n[Erase Error] ${err.message}`);
+    alert(`Erase failed: ${err.message}`);
+    setProgress(null, "Erase Failed");
+  } finally {
+    flashBtn.disabled = false;
+    eraseOnlyBtn.disabled = false;
+    probeBtn.disabled = false;
   }
-  cmdInput.value = "";
 }
-
-// Keyboard history browsing (Up/Down arrows)
-cmdInput.addEventListener("keydown", (e) => {
-  if (e.key === "ArrowUp") {
-    if (historyIndex > 0) {
-      historyIndex--;
-      cmdInput.value = commandHistory[historyIndex];
-    }
-    e.preventDefault();
-  } else if (e.key === "ArrowDown") {
-    if (historyIndex < commandHistory.length - 1) {
-      historyIndex++;
-      cmdInput.value = commandHistory[historyIndex];
-    } else {
-      historyIndex = commandHistory.length;
-      cmdInput.value = "";
-    }
-    e.preventDefault();
-  } else if (e.key === "c" && e.ctrlKey) {
-    e.preventDefault();
-    sendControlAction("interrupt");
-  } else if (e.key === "d" && e.ctrlKey) {
-    e.preventDefault();
-    sendControlAction("soft_reset");
-  }
-});
 
 // -------------------- WebSocket Stream --------------------
 
 function initWebSocket() {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-    return;
-  }
-
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${proto}//${window.location.host}/ws/console`;
   ws = new WebSocket(wsUrl);
 
-  ws.onopen = () => {
-    console.log("WebSocket console connected");
-  };
-
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data);
-      if (msg.type === "term") {
-        appendTerminal(msg.data);
-      } else if (msg.type === "state") {
-        if (msg.data && typeof msg.data.connected === "boolean") {
-          if (msg.data.connected !== isConnected) {
-            setConnectionState(msg.data.connected, msg.data.target);
-          }
+      if (msg.type === "flash") {
+        const { line, pct } = msg.data || {};
+        if (pct !== undefined && pct !== null) {
+          setProgress(pct, line || `Progress: ${pct}%`);
+        }
+        if (line) {
+          appendLog(line);
         }
       }
     } catch (err) {
@@ -285,15 +314,16 @@ function initWebSocket() {
   };
 
   ws.onclose = () => {
-    console.log("WebSocket console closed");
-  };
-
-  ws.onerror = (err) => {
-    console.error("WebSocket console error:", err);
+    setTimeout(initWebSocket, 2000);
   };
 }
 
-// -------------------- Theme Toggle --------------------
+// -------------------- Theme & Helpers --------------------
+
+function updateStatusBadge(text, isGood = false) {
+  statusText.textContent = text;
+  statusBadge.className = isGood ? "status-badge connected" : "status-badge disconnected";
+}
 
 function initTheme() {
   const saved = localStorage.getItem("esp32_theme");
@@ -307,22 +337,15 @@ function initTheme() {
   });
 }
 
-// -------------------- Event Listeners --------------------
+// -------------------- Initialization --------------------
 
 refreshPortsBtn.addEventListener("click", fetchPorts);
-connectBtn.addEventListener("click", handleConnectToggle);
-cmdForm.addEventListener("submit", handleCommandSubmit);
-clearTermBtn.addEventListener("click", clearTerminal);
-
-stopBtn.addEventListener("click", () => sendControlAction("interrupt"));
-softResetBtn.addEventListener("click", () => sendControlAction("soft_reset"));
-resetBtn.addEventListener("click", () => sendControlAction("hard_reset"));
-
-// -------------------- Initialization --------------------
+probeBtn.addEventListener("click", probeHardware);
+flashBtn.addEventListener("click", handleFlash);
+eraseOnlyBtn.addEventListener("click", handleEraseOnly);
 
 window.addEventListener("DOMContentLoaded", () => {
   initTheme();
-  appendTerminal("Welcome to ESP32 Web Console!\nSelect your port (e.g. /dev/ttyUSB0) and click Connect.\n--------------------------------------------------\n");
   fetchPorts();
   initWebSocket();
 });

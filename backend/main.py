@@ -107,6 +107,12 @@ class FlashLocalReq(BaseModel):
     entries: list[FlashLocalEntry]
 
 
+class FlashBundledReq(BaseModel):
+    port: str
+    baud: int = 460800
+    erase_first: bool = True
+
+
 class ToolchainInspectReq(BaseModel):
     project_dir: str
 
@@ -523,6 +529,31 @@ async def flash_write_local(req: FlashLocalReq):
             port=req.port,
             entries=pairs,
             chip=req.chip,
+            baud=req.baud,
+            erase_first=req.erase_first,
+            on_progress=on_prog,
+            on_xray=dm._handle_xray,
+        )
+        return {"ok": True, "log": log}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/flash/install-bundled-micropython")
+async def flash_bundled_micropython(req: FlashBundledReq):
+    fw_path = BASE_DIR / "micropython_firmware.bin"
+    if not fw_path.exists():
+        raise HTTPException(status_code=404, detail="Bundled micropython_firmware.bin not found.")
+    try:
+        await dm.release_serial_if_busy(req.port)
+
+        def on_prog(line: str, pct: Optional[int]):
+            dm._broadcast_sync({"type": "flash", "data": {"line": line, "pct": pct}})
+
+        log = await flasher.write_flash_bins(
+            port=req.port,
+            entries=[("0x1000", str(fw_path))],
+            chip="auto",
             baud=req.baud,
             erase_first=req.erase_first,
             on_progress=on_prog,
