@@ -184,18 +184,18 @@ def test_websocket_terminal_and_xray():
 
 
 def test_info_buttons_coverage_in_html():
-    """Verify data-info keys in index.html exist inside learning.js if present."""
+    """Verify every data-info key in index.html exists inside learning.js INFO_CATALOG."""
     import re
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
     html = (root / "frontend" / "index.html").read_text(encoding="utf-8")
+    js = (root / "frontend" / "js" / "learning.js").read_text(encoding="utf-8")
+
     keys = set(re.findall(r'data-info="([^"]+)"', html))
-    learning_file = root / "frontend" / "js" / "learning.js"
-    if keys and learning_file.exists():
-        js = learning_file.read_text(encoding="utf-8")
-        for k in keys:
-            assert f"{k}:" in js, f"Missing INFO_CATALOG entry for data-info='{k}'"
+    assert len(keys) >= 20
+    for k in keys:
+        assert f"{k}:" in js, f"Missing INFO_CATALOG entry for data-info='{k}'"
 
 
 def test_static_assets_and_helpers():
@@ -206,7 +206,7 @@ def test_static_assets_and_helpers():
     index_html = (root / "frontend" / "index.html").read_text(encoding="utf-8")
     guide_html = (root / "frontend" / "guide.html").read_text(encoding="utf-8")
     assets = set(re.findall(r'(?:src|href)="(/static/[^"]+)"', index_html + guide_html))
-    assert len(assets) >= 1
+    assert len(assets) >= 9
 
     with TestClient(app) as client:
         for asset in assets:

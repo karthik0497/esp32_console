@@ -3,32 +3,115 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ESP32 Active-Learning Console — Clean Workbench</title>
+  <title>ESP32 Console — Active Learning Device Workbench</title>
   <link rel="stylesheet" href="/static/css/style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
 <div class="app-shell">
 
-  <!-- TOP NAVBAR -->
+  <!-- TOP HEADER -->
   <header class="topbar">
     <div class="brand">
       <div class="brand-logo">ESP</div>
       <div>
         <h1>ESP32 Active-Learning Console</h1>
-        <small>MicroPython Control &bull; Serial Terminal &bull; Multi-Language Flasher</small>
+        <small>MicroPython Control • File &amp; Wi-Fi Manager • Multi-Language Flasher</small>
       </div>
     </div>
 
     <div class="topbar-actions">
-      <span id="statusPill" class="status-pill state-DISCONNECTED">
-        <span class="dot"></span>
-        <span id="statusText">Disconnected</span>
+      <span class="with-info">
+        <button type="button" id="toggleLearningBtn" class="btn btn-sm btn-primary">Active Learning: ON</button>
+        <button type="button" class="info-btn" data-info="learning_mode" title="Explain Active Learning">i</button>
       </span>
-      <button type="button" id="themeToggleBtn" class="btn btn-sm btn-subtle" title="Toggle Light/Dark Theme">🌓 Theme</button>
-      <a class="btn btn-sm btn-subtle" href="/guide" target="_blank" title="Open Illustrated Guide">📖 Guide</a>
+      <span class="with-info">
+        <button type="button" id="toggleMissionsBtn" class="btn btn-sm">Missions</button>
+        <button type="button" class="info-btn" data-info="missions_toggle" title="Explain Guided Missions">i</button>
+      </span>
+      <span class="with-info">
+        <a class="btn btn-sm btn-green" href="/guide" target="_blank">Kid-Friendly Guide (.MD)</a>
+        <button type="button" class="info-btn" data-info="guide_page" title="About Guide Page">i</button>
+      </span>
+      <span class="with-info">
+        <button type="button" id="themeToggleBtn" class="btn btn-sm">Light / Dark</button>
+        <button type="button" class="info-btn" data-info="theme_toggle" title="About Theme">i</button>
+      </span>
     </div>
   </header>
+
+  <!-- CONNECTION & EXECUTION CONTROL STRIP -->
+  <section class="control-strip">
+    <div class="control-group">
+      <span class="with-info">
+        <select id="connMode" title="Connection Type">
+          <option value="serial">USB Serial / Simulator</option>
+          <option value="webrepl">Wi-Fi WebREPL</option>
+        </select>
+        <button type="button" class="info-btn" data-info="conn_mode">i</button>
+      </span>
+
+      <span id="serialInputs" class="control-group">
+        <span class="with-info">
+          <select id="portSelect" style="min-width:250px"></select>
+          <button type="button" class="info-btn" data-info="port_select">i</button>
+        </span>
+        <span class="with-info">
+          <button type="button" id="refreshPortsBtn" class="btn btn-sm">Refresh</button>
+          <button type="button" class="info-btn" data-info="refresh_ports">i</button>
+        </span>
+        <span class="with-info">
+          <select id="baudSelect">
+            <option value="115200" selected>115200 baud</option>
+            <option value="74880">74880 baud (Boot)</option>
+            <option value="9600">9600 baud</option>
+            <option value="460800">460800 baud</option>
+          </select>
+          <button type="button" class="info-btn" data-info="baud_rate">i</button>
+        </span>
+      </span>
+
+      <span id="webreplInputs" class="control-group" style="display:none">
+        <input id="webreplHostInput" class="input" placeholder="ESP32 IP (e.g. 192.168.1.142)" style="width:190px" />
+        <input id="webreplPassInput" class="input" type="password" value="1234" placeholder="WebREPL Pass" style="width:120px" />
+      </span>
+
+      <span class="with-info">
+        <button type="button" id="connectBtn" class="btn btn-primary">Connect</button>
+        <button type="button" class="info-btn" data-info="connect_btn">i</button>
+      </span>
+
+      <span class="with-info">
+        <span id="statusPill" class="status-pill state-DISCONNECTED">
+          <span class="dot"></span>
+          <span id="statusText">Disconnected</span>
+        </span>
+        <button type="button" class="info-btn" data-info="status_pill">i</button>
+      </span>
+    </div>
+
+    <div class="control-group">
+      <span class="with-info">
+        <button type="button" id="stopBtn" class="btn btn-warn btn-sm" disabled>Stop (Ctrl+C)</button>
+        <button type="button" class="info-btn" data-info="stop_ctrl_c">i</button>
+      </span>
+      <span class="with-info">
+        <button type="button" id="forceStopBtn" class="btn btn-danger btn-sm" disabled>Force Stop</button>
+        <button type="button" class="info-btn" data-info="force_stop">i</button>
+      </span>
+      <span class="with-info">
+        <button type="button" id="softResetBtn" class="btn btn-sm" disabled>Soft Reboot</button>
+        <button type="button" class="info-btn" data-info="soft_reset">i</button>
+      </span>
+      <span class="with-info">
+        <button type="button" id="hardResetBtn" class="btn btn-sm" disabled>Hard Reset</button>
+        <button type="button" class="info-btn" data-info="hard_reset">i</button>
+      </span>
+      <span class="with-info">
+        <button type="button" id="safeRecoveryBtn" class="btn btn-danger btn-sm" disabled>Safe Recovery</button>
+        <button type="button" class="info-btn" data-info="safe_recovery">i</button>
+      </span>
+    </div>
+  </section>
 
   <!-- ALERT BANNER -->
   <div id="alertBanner" class="alert-banner hidden">
@@ -36,163 +119,473 @@
     <button type="button" id="dismissAlertBtn" class="btn btn-sm">Dismiss</button>
   </div>
 
-  <!-- WORKSPACE WITH SIDEBAR -->
+  <!-- GUIDED MISSIONS STRIP -->
+  <section id="missionsBar" class="missions-bar">
+    <div class="missions-header">
+      <span>Guided First-Time Missions — <span id="missionsProgress">0 / 6 Completed</span></span>
+      <button type="button" id="resetMissionsBtn" class="btn btn-sm">Reset Progress</button>
+    </div>
+    <div id="missionsList" class="missions-list"></div>
+  </section>
+
+  <!-- WORKSPACE -->
   <div class="workspace">
-    <!-- Clean Sidebar Navigation -->
     <aside class="sidebar">
-      <button type="button" class="nav-item active" data-tab="tab-terminal">
-        <span class="nav-icon">🔌</span> 1. USB Connection
-      </button>
-      <button type="button" class="nav-item" data-tab="tab-files">
-        <span class="nav-icon">📁</span> 2. Files &amp; Deploy
-      </button>
-      <button type="button" class="nav-item" data-tab="tab-wifi">
-        <span class="nav-icon">📶</span> 3. Wi-Fi &amp; WebREPL
-      </button>
-      <button type="button" class="nav-item" data-tab="tab-metrics">
-        <span class="nav-icon">⚡</span> 4. Metrics &amp; Health
-      </button>
-      <button type="button" class="nav-item" data-tab="tab-flash">
-        <span class="nav-icon">🔥</span> 5. Flash Firmware
-      </button>
+      <button type="button" class="nav-item active" data-tab="tab-terminal">1. Terminal &amp; REPL</button>
+      <button type="button" class="nav-item" data-tab="tab-files">2. Files &amp; Deploy</button>
+      <button type="button" class="nav-item" data-tab="tab-wifi">3. Wi-Fi &amp; WebREPL</button>
+      <button type="button" class="nav-item" data-tab="tab-metrics">4. Metrics &amp; Hardware</button>
+      <button type="button" class="nav-item" data-tab="tab-flash">5. Flash &amp; Other Langs</button>
+
+      <div class="sidebar-tip">
+        <strong>No ESP32 plugged in?</strong><br />
+        Pick <code>SIMULATOR</code> at the top and click <strong>Connect</strong>! You can test files, RAM, Wi-Fi, <code>Ctrl+C</code>, and flashing safely right now.<br /><br />
+        Click any <strong>(i)</strong> button to learn <em>What, Why &amp; How</em>!
+      </div>
     </aside>
 
-    <!-- Main Content Area: All Tabs Empty, Ready to Add Options One by One -->
     <main class="main-area">
       <div class="tab-content">
 
-        <!-- TAB 1: USB CONNECTION -->
+        <!-- TAB 1: TERMINAL & REPL -->
         <section id="tab-terminal" class="tab-pane active">
-
-          <!-- 1. Dedicated USB Connection Card -->
-          <div class="card connection-hero-card">
+          <div class="card">
             <div class="card-title">
-              <span>🔌 Device Connection</span>
+              <span class="with-info">Live Serial / WebREPL Monitor <button type="button" class="info-btn" data-info="terminal_box">i</button></span>
               <div class="control-group">
-                <span class="field-label-inline">Mode:</span>
-                <select id="connMode" class="input input-sm" title="Connection Mode">
-                  <option value="serial" selected>USB Serial Cable</option>
-                  <option value="webrepl">Wi-Fi WebREPL</option>
-                </select>
+                <button type="button" id="termPauseBtn" class="btn btn-sm">Pause Scroll</button>
+                <button type="button" id="termCopyBtn" class="btn btn-sm">Copy</button>
+                <button type="button" id="termClearBtn" class="btn btn-sm">Clear</button>
+                <button type="button" class="info-btn" data-info="terminal_controls">i</button>
               </div>
             </div>
 
-            <!-- Form: Port, Baud, and Connect -->
-            <div class="connect-form-grid">
-              <div id="serialInputs" class="serial-inputs-group">
-                <div class="input-col port-col">
-                  <label class="field-label" for="portSelect">Target Port:</label>
-                  <div class="port-select-row">
-                    <select id="portSelect" class="input flex-1"></select>
-                    <button type="button" id="refreshPortsBtn" class="btn btn-sm" title="Refresh USB Ports">↻ Refresh</button>
-                  </div>
-                </div>
-
-                <div class="input-col baud-col">
-                  <label class="field-label" for="baudSelect">Baud Rate:</label>
-                  <select id="baudSelect" class="input">
-                    <option value="115200" selected>115200 baud</option>
-                    <option value="74880">74880 baud (Boot)</option>
-                    <option value="9600">9600 baud</option>
-                    <option value="57600">57600 baud</option>
-                    <option value="230400">230400 baud</option>
-                    <option value="460800">460800 baud</option>
-                    <option value="921600">921600 baud</option>
-                  </select>
-                </div>
-              </div>
-
-              <!-- WebREPL Inputs (Hidden unless WebREPL mode chosen) -->
-              <div id="webreplInputs" class="webrepl-inputs-group" style="display:none">
-                <div class="input-col port-col">
-                  <label class="field-label" for="webreplHostInput">ESP32 IP Address:</label>
-                  <input id="webreplHostInput" class="input" placeholder="e.g. 192.168.1.142" />
-                </div>
-                <div class="input-col baud-col">
-                  <label class="field-label" for="webreplPassInput">WebREPL Password:</label>
-                  <input id="webreplPassInput" class="input" type="password" value="1234" placeholder="4–9 chars" />
-                </div>
-              </div>
-
-              <div class="input-col connect-btn-col">
-                <label class="field-label">&nbsp;</label>
-                <button type="button" id="connectBtn" class="btn btn-primary btn-connect">Connect</button>
-              </div>
+            <div class="macro-row">
+              <span class="with-info muted">Quick Macros: <button type="button" class="info-btn" data-info="quick_macros">i</button></span>
+              <button type="button" class="btn btn-sm macro-btn" data-cmd="import sys, os; print(sys.version, os.uname())">Chip Info</button>
+              <button type="button" class="btn btn-sm macro-btn" data-cmd="import os; print(os.listdir('/'))">List Files</button>
+              <button type="button" class="btn btn-sm macro-btn" data-cmd="import gc; print('Free RAM:', gc.mem_free(), 'Alloc:', gc.mem_alloc())">Check RAM</button>
+              <button type="button" class="btn btn-sm macro-btn" data-cmd="import network; print('IP:', network.WLAN(network.STA_IF).ifconfig())">Check Wi-Fi IP</button>
+              <button type="button" class="btn btn-sm macro-btn" data-cmd="import machine; p=machine.Pin(2, machine.Pin.OUT); p.value(0 if p.value() else 1); print('Pin 2:', p.value())">Toggle LED (Pin 2)</button>
             </div>
 
-            <!-- Board Controls Bar -->
-            <div class="board-controls-strip">
-              <span class="strip-label">Execution Controls:</span>
-              <div class="control-group">
-                <button type="button" id="stopBtn" class="btn btn-sm btn-warn" disabled>Stop (Ctrl+C)</button>
-                <button type="button" id="softResetBtn" class="btn btn-sm" disabled>Soft Reboot</button>
-                <button type="button" id="hardResetBtn" class="btn btn-sm" disabled>Hard Reset</button>
-                <button type="button" id="safeRecoveryBtn" class="btn btn-sm btn-danger" disabled>Safe Recovery</button>
-                <button type="button" id="forceStopBtn" class="btn btn-sm btn-danger" disabled>Force Stop</button>
-              </div>
+            <div id="terminalBox" class="terminal-box mono">Welcome! Select a port (or SIMULATOR) above and click Connect.
+</div>
+
+            <div class="term-input-row">
+              <input id="termInput" class="input" placeholder="Type a MicroPython command (e.g. print('hello') or help()) and press Enter..." />
+              <button type="button" id="termSendBtn" class="btn btn-primary">Send</button>
+              <button type="button" class="info-btn" data-info="repl_input">i</button>
             </div>
           </div>
         </section>
 
-        <!-- TAB 2: FILES & DEPLOY (Clean & Empty) -->
+        <!-- TAB 2: FILES & DEPLOY -->
         <section id="tab-files" class="tab-pane">
-          <div class="card">
-            <div class="card-title">
-              <span>📁 2. Files &amp; Deploy</span>
+          <div class="files-layout">
+            <div class="card">
+              <div class="card-title">
+                <span class="with-info">ESP32 File Directory <button type="button" class="info-btn" data-info="file_explorer">i</button></span>
+                <button type="button" id="refreshFilesBtn" class="btn btn-sm btn-primary">Refresh Files</button>
+              </div>
+
+              <div class="control-group" style="margin-bottom:10px">
+                <button type="button" id="newFileBtn" class="btn btn-sm">+ New File</button>
+                <button type="button" id="newDirBtn" class="btn btn-sm">+ New Folder</button>
+                <button type="button" class="info-btn" data-info="file_editor_ops">i</button>
+                <span class="with-info">
+                  <a href="/api/backup-zip" class="btn btn-sm btn-green">Backup .zip</a>
+                  <button type="button" class="info-btn" data-info="file_backup">i</button>
+                </span>
+              </div>
+
+              <div id="fileDropzone" class="dropzone">
+                Drag &amp; drop <code>.py</code> / <code>.json</code> / <code>.mpy</code> files here<br />
+                <div style="margin-top:8px" class="control-group">
+                  <span class="with-info" style="margin:auto">
+                    <input id="uploadTargetDir" class="input" value="/" style="width:95px" title="Target folder on ESP32" />
+                    <button type="button" id="pickUploadBtn" class="btn btn-sm">Upload Files</button>
+                    <button type="button" class="info-btn" data-info="file_upload">i</button>
+                  </span>
+                </div>
+                <input id="fileUploadInput" type="file" multiple style="display:none" />
+              </div>
+
+              <div id="fileList" class="file-list">
+                <div class="file-row"><span class="muted">Connect &amp; click Refresh Files</span></div>
+              </div>
             </div>
-            <div id="filesTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
-              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add File System features</p>
-              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Directory tree, file editor, and upload/download options will be added here.</p>
+
+            <div class="card">
+              <div class="card-title">
+                <span>Inline File Editor &amp; Runner</span>
+                <div class="control-group">
+                  <button type="button" id="saveFileBtn" class="btn btn-sm btn-primary">Save to ESP32</button>
+                  <span class="with-info">
+                    <button type="button" id="runFileBtn" class="btn btn-sm btn-green">Run File</button>
+                    <button type="button" class="info-btn" data-info="file_run">i</button>
+                  </span>
+                  <span class="with-info">
+                    <button type="button" id="makeMainBtn" class="btn btn-sm btn-warn">Make main.py</button>
+                    <button type="button" class="info-btn" data-info="file_make_main">i</button>
+                  </span>
+                  <button type="button" id="deleteFileBtn" class="btn btn-sm btn-danger">Delete</button>
+                </div>
+              </div>
+
+              <div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input id="editorPath" class="input mono" style="flex:1;min-width:160px" placeholder="/main.py" />
+                <span class="with-info">
+                  <select id="templateSelect" title="Load Starter Example">
+                    <option value="">Load Starter Template...</option>
+                    <option value="blink">Blink Onboard LED (Pin 2)</option>
+                    <option value="metrics_loop">Live Telemetry Loop (esp_console_agent)</option>
+                    <option value="web_hello">Mini Web Server on ESP32</option>
+                    <option value="runaway">Runaway Loop (Practice Ctrl+C)</option>
+                  </select>
+                  <button type="button" class="info-btn" data-info="code_templates">i</button>
+                </span>
+              </div>
+              <textarea id="fileEditor" class="code-editor" placeholder="Click any file on the left to inspect or edit it..."></textarea>
             </div>
           </div>
         </section>
 
-        <!-- TAB 3: WI-FI & WEBREPL (Clean & Empty) -->
+        <!-- TAB 3: WI-FI & WEBREPL -->
         <section id="tab-wifi" class="tab-pane">
-          <div class="card">
-            <div class="card-title">
-              <span>📶 3. Wi-Fi &amp; WebREPL</span>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">
+                <span>1. Current Wi-Fi Status &amp; Scanner</span>
+                <div class="control-group">
+                  <span class="with-info">
+                    <button type="button" id="wifiStatusBtn" class="btn btn-sm">Check Status</button>
+                    <button type="button" class="info-btn" data-info="wifi_status_btn">i</button>
+                  </span>
+                  <span class="with-info">
+                    <button type="button" id="wifiScanBtn" class="btn btn-sm btn-primary">Scan Wi-Fi</button>
+                    <button type="button" class="info-btn" data-info="wifi_scan">i</button>
+                  </span>
+                </div>
+              </div>
+              <div id="wifiStatusCard" class="muted" style="margin-bottom:10px">Click Check Status to inspect live IP and saved Wi-Fi.</div>
+              <table>
+                <thead><tr><th>Network (SSID)</th><th>Signal</th><th>Security</th><th></th></tr></thead>
+                <tbody id="wifiScanBody">
+                  <tr><td colspan="4" class="muted">Click Scan Wi-Fi to list nearby 2.4 GHz routers.</td></tr>
+                </tbody>
+              </table>
             </div>
-            <div id="wifiTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
-              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add Wi-Fi &amp; WebREPL features</p>
-              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Wi-Fi scanning, station connection, AP fallback, and WebREPL setup will be added here.</p>
+
+            <div>
+              <div class="card">
+                <div class="card-title">
+                  <span class="with-info">2. Configure / Change Wi-Fi <button type="button" class="info-btn" data-info="wifi_connect">i</button></span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <input id="wifiSsid" class="input" placeholder="Wi-Fi Name (SSID — 2.4 GHz)" />
+                  <input id="wifiPass" class="input" type="password" placeholder="Wi-Fi Password" />
+                  <label style="font-size:13px"><input id="wifiSaveCfg" type="checkbox" checked /> Save credentials to <code>/wifi_config.json</code></label>
+                  <label style="font-size:13px" class="with-info">
+                    <input id="wifiApFallback" type="checkbox" checked />
+                    <span>Install AP Hotspot Fallback (<code>wifi_manager.py</code>) — change Wi-Fi later without USB!</span>
+                    <button type="button" class="info-btn" data-info="wifi_ap_fallback">i</button>
+                  </label>
+                  <div class="control-group">
+                    <button type="button" id="wifiConnectBtn" class="btn btn-primary">Connect &amp; Save Wi-Fi</button>
+                    <span class="with-info">
+                      <button type="button" id="initialSetupBtn" class="btn btn-green">1-Click Full Wi-Fi + WebREPL Setup</button>
+                      <button type="button" class="info-btn" data-info="initial_wireless_setup">i</button>
+                    </span>
+                  </div>
+                  <div id="initialSetupSummary" class="muted"></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">
+                  <span class="with-info">3. Enable Wireless WebREPL (Unplug USB!) <button type="button" class="info-btn" data-info="webrepl_setup">i</button></span>
+                </div>
+                <div class="control-group" style="margin-bottom:8px">
+                  <input id="webreplSetupPass" class="input" value="1234" placeholder="4–9 char password" style="width:150px" />
+                  <button type="button" id="setupWebReplBtn" class="btn btn-green">Enable WebREPL</button>
+                  <button type="button" id="switchWebReplBtn" class="btn btn-sm">Use in Top Bar</button>
+                </div>
+                <div class="muted">WebSocket Address: <code id="webreplTargetHint">Not configured yet</code></div>
+              </div>
+
+              <div class="card">
+                <div class="card-title"><span class="with-info">4. Start Manual Hotspot (AP Mode) <button type="button" class="info-btn" data-info="wifi_manual_ap">i</button></span></div>
+                <div class="control-group">
+                  <input id="apSsid" class="input" value="ESP32-Setup" style="width:140px" />
+                  <input id="apPass" class="input" value="12345678" style="width:130px" />
+                  <button type="button" id="startApBtn" class="btn btn-sm">Start AP (192.168.4.1)</button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <!-- TAB 4: METRICS & HEALTH (Clean & Empty) -->
+        <!-- TAB 4: METRICS & HARDWARE -->
         <section id="tab-metrics" class="tab-pane">
+          <div class="control-group" style="margin-bottom:12px">
+            <span class="with-info">
+              <button type="button" id="sampleMetricsBtn" class="btn btn-primary">Sample Metrics Now</button>
+              <button type="button" class="info-btn" data-info="sample_metrics">i</button>
+            </span>
+            <span class="with-info">
+              <button type="button" id="runCheckupBtn" class="btn btn-green">Run Full Health Checkup</button>
+              <button type="button" class="info-btn" data-info="health_checkup">i</button>
+            </span>
+            <span class="with-info">
+              <button type="button" id="runGcBtn" class="btn btn-green">Free RAM Now (gc.collect)</button>
+              <button type="button" class="info-btn" data-info="gc_collect">i</button>
+            </span>
+            <span class="with-info">
+              <button type="button" id="installAgentBtn" class="btn">Install Live Metrics Agent</button>
+              <button type="button" class="info-btn" data-info="live_agent">i</button>
+            </span>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">
+                <span class="with-info">Heap RAM Memory <button type="button" class="info-btn" data-info="ram_gauge">i</button></span>
+              </div>
+              <div id="ramText" class="big-stat" style="font-size:16px">--</div>
+              <div class="gauge-track"><div id="ramBar" class="gauge-fill"></div></div>
+              <div class="muted">Temporary study-desk memory cleared on reboot.</div>
+            </div>
+
+            <div class="card">
+              <div class="card-title">
+                <span class="with-info">Flash Filesystem Storage <button type="button" class="info-btn" data-info="flash_gauge">i</button></span>
+              </div>
+              <div id="flashText" class="big-stat" style="font-size:16px">--</div>
+              <div class="gauge-track"><div id="flashBar" class="gauge-fill"></div></div>
+              <div class="muted">Permanent backpack storage for .py files &amp; configs.</div>
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <div class="card">
+              <div class="card-title">
+                <span class="with-info">CPU Frequency <button type="button" class="info-btn" data-info="cpu_freq">i</button></span>
+              </div>
+              <div id="cpuStat" class="big-stat">--</div>
+              <div class="control-group">
+                <select id="cpuFreqSelect">
+                  <option value="80">80 MHz (Power Save)</option>
+                  <option value="160">160 MHz (Balanced)</option>
+                  <option value="240" selected>240 MHz (Max Speed)</option>
+                </select>
+                <button type="button" id="applyFreqBtn" class="btn btn-sm">Apply</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title"><span class="with-info">MCU Internal Temp <button type="button" class="info-btn" data-info="mcu_temp">i</button></span></div>
+              <div id="tempStat" class="big-stat">--</div>
+              <div class="muted">Supported on ESP32-S2 / S3 / C3 / C6 chips.</div>
+            </div>
+
+            <div class="card">
+              <div class="card-title"><span class="with-info">Live Wi-Fi Link <button type="button" class="info-btn" data-info="wifi_link_metric">i</button></span></div>
+              <div id="wifiMetricStat" class="big-stat" style="font-size:16px">--</div>
+              <div class="muted">Current Station IP &amp; signal strength.</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">
+                <span class="with-info">Last Reset Reason (Plain English) <button type="button" class="info-btn" data-info="reset_cause">i</button></span>
+              </div>
+              <div id="resetTitle" style="font-weight:700;margin-bottom:4px">Not sampled yet</div>
+              <div id="resetMeaning" class="muted">Click Sample Metrics Now to see why the board last restarted.</div>
+            </div>
+
+            <div class="card">
+              <div class="card-title"><span>Hardware Quick-Checks (No Script Needed!)</span></div>
+              <div class="control-group" style="margin-bottom:8px">
+                <span class="with-info">SCL <input id="i2cScl" class="input" value="22" style="width:55px" /> SDA <input id="i2cSda" class="input" value="21" style="width:55px" /> <button type="button" id="scanI2cBtn" class="btn btn-sm btn-primary">Scan I2C Bus</button> <button type="button" class="info-btn" data-info="i2c_scan">i</button></span>
+              </div>
+              <div id="i2cResults" class="muted" style="margin-bottom:10px">Detects OLED displays, BME280 sensors, etc.</div>
+              <div class="control-group">
+                <span class="with-info">GPIO Pin <input id="gpioPinInput" class="input" value="2" style="width:55px" /> <button type="button" id="gpioToggleBtn" class="btn btn-sm">Toggle Pin</button> <button type="button" id="gpioReadBtn" class="btn btn-sm">Read Pin</button> <button type="button" class="info-btn" data-info="gpio_probe">i</button></span>
+              </div>
+              <div id="gpioResult" class="muted" style="margin-top:6px"></div>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-title">
-              <span>⚡ 4. Metrics &amp; Health</span>
+              <span class="with-info">Full Board Health Checkup Scorecard <button type="button" class="info-btn" data-info="health_checkup">i</button></span>
             </div>
-            <div id="metricsTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
-              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add Metrics &amp; Health features</p>
-              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">RAM free/used, CPU frequency, uptime, and system diagnostics will be added here.</p>
-            </div>
+            <table>
+              <thead><tr><th>Check</th><th>Status</th><th>Reading</th><th>Recommendation</th></tr></thead>
+              <tbody id="healthCheckupBody">
+                <tr><td colspan="4" class="muted">Click "Run Full Health Checkup" above to run all 7 board diagnostics at once.</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
-        <!-- TAB 5: FLASH FIRMWARE (Clean & Empty) -->
+        <!-- TAB 5: FLASH & OTHER LANGUAGES -->
         <section id="tab-flash" class="tab-pane">
-          <div class="card">
-            <div class="card-title">
-              <span>🔥 5. Flash Firmware</span>
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-title">
+                <span class="with-info">1. Firmware Flasher (MicroPython &amp; .bin Images) <button type="button" class="info-btn" data-info="flash_write">i</button></span>
+              </div>
+              <div class="control-group" style="margin-bottom:10px">
+                <select id="flashPortSelect" style="min-width:220px"></select>
+                <span class="with-info">
+                  <button type="button" id="probeChipBtn" class="btn btn-sm">Probe Chip Info</button>
+                  <button type="button" class="info-btn" data-info="flash_probe">i</button>
+                </span>
+                <span class="with-info">
+                  <button type="button" id="eraseFlashBtn" class="btn btn-sm btn-danger">Erase Flash</button>
+                  <button type="button" class="info-btn" data-info="flash_erase">i</button>
+                </span>
+              </div>
+              <div id="probeSummary" class="muted" style="margin-bottom:10px">Click Probe Chip Info to identify ESP32 model, MAC, and Flash size.</div>
+
+              <div class="control-group" style="margin-bottom:10px">
+                <select id="flashChipSelect">
+                  <option value="auto" selected>Auto-Detect Chip</option>
+                  <option value="esp32">ESP32</option>
+                  <option value="esp32s2">ESP32-S2</option>
+                  <option value="esp32s3">ESP32-S3</option>
+                  <option value="esp32c3">ESP32-C3</option>
+                  <option value="esp32c6">ESP32-C6</option>
+                </select>
+                <select id="flashBaudSelect">
+                  <option value="460800" selected>460800 baud</option>
+                  <option value="115200">115200 baud (Safe)</option>
+                  <option value="921600">921600 baud (Fast)</option>
+                </select>
+                <label style="font-size:13px"><input id="eraseBeforeFlash" type="checkbox" /> Erase first</label>
+              </div>
+
+              <div id="flashPartsList" class="flash-parts">
+                <div class="flash-part-row">
+                  <input type="text" class="input part-offset" value="0x1000" style="width:110px" title="Flash Offset" />
+                  <input type="file" class="input part-file" accept=".bin" />
+                </div>
+              </div>
+
+              <div class="control-group" style="margin-bottom:10px">
+                <button type="button" id="addFlashPartBtn" class="btn btn-sm">+ Add .bin Part</button>
+                <span class="with-info">
+                  <button type="button" id="presetCppOffsetsBtn" class="btn btn-sm">C++ / IDF 3-Part Preset</button>
+                  <button type="button" class="info-btn" data-info="multi_offset">i</button>
+                </span>
+                <button type="button" id="writeFlashBtn" class="btn btn-primary">Flash Firmware</button>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="gauge-track" style="flex:1"><div id="flashProgressBar" class="gauge-fill"></div></div>
+                <span id="flashPctLabel" class="muted">0%</span>
+              </div>
+              <pre id="flashLogBox" class="terminal-box" style="height:170px;margin-top:8px">Flasher log ready.</pre>
             </div>
-            <div id="flashTabContent" class="tab-empty-placeholder" style="padding: 28px; text-align: center; color: var(--text-muted);">
-              <p style="font-size: 15px; margin: 0 0 8px 0; font-weight: 600; color: var(--text);">Ready to add Flash Firmware features</p>
-              <p style="font-size: 13px; margin: 0; color: var(--text-dim);">Chip detection, ROM probe, 1-click MicroPython install, and custom flasher will be added here.</p>
+
+            <div>
+              <div class="card">
+                <div class="card-title">
+                  <span class="with-info">2. Other Languages Build Bridge (C++ / Arduino / IDF) <button type="button" class="info-btn" data-info="toolchain_build">i</button></span>
+                </div>
+                <div id="toolchainBadges" class="muted" style="margin-bottom:8px">Checking installed compilers...</div>
+                <div class="control-group" style="margin-bottom:8px">
+                  <input id="projectDirInput" class="input" style="flex:1" placeholder="/path/to/arduino_or_platformio_project" />
+                  <button type="button" id="inspectProjBtn" class="btn btn-sm">Inspect</button>
+                </div>
+                <div class="control-group" style="margin-bottom:8px">
+                  <select id="buildFrameworkSelect">
+                    <option value="arduino">Arduino (arduino-cli)</option>
+                    <option value="platformio">PlatformIO (pio)</option>
+                    <option value="esp-idf">ESP-IDF (idf.py)</option>
+                  </select>
+                  <button type="button" id="buildProjBtn" class="btn btn-sm btn-primary">Compile Project</button>
+                </div>
+                <div id="projectInspectOut" class="muted"></div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">
+                  <span class="with-info">3. Wireless OTA Firmware Update (.bin over Wi-Fi) <button type="button" class="info-btn" data-info="ota_upload">i</button></span>
+                </div>
+                <div class="control-group" style="margin-bottom:8px">
+                  <select id="otaModeSelect">
+                    <option value="http">HTTP OTA (/update)</option>
+                    <option value="arduino">ArduinoOTA (espota)</option>
+                  </select>
+                  <input id="otaTargetInput" class="input" style="flex:1" placeholder="http://192.168.1.142/update or 192.168.1.142" />
+                </div>
+                <div class="control-group" style="margin-bottom:8px">
+                  <input id="otaPortInput" class="input" value="3232" style="width:80px" title="ArduinoOTA Port" />
+                  <input id="otaPassInput" class="input" type="password" placeholder="OTA Password (if any)" style="width:150px" />
+                  <input id="otaBinInput" class="input" type="file" accept=".bin" />
+                  <button type="button" id="sendOtaBtn" class="btn btn-green btn-sm">Push OTA</button>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-title">
+                  <span class="with-info">4. Crash &amp; Guru Meditation Decoder <button type="button" class="info-btn" data-info="crash_decoder">i</button></span>
+                </div>
+                <textarea id="crashLogInput" class="input mono" style="width:100%;height:78px;margin-bottom:6px" placeholder="Paste 'Guru Meditation Error: Core 1 panic...' or 'rst:0x...' text here..."></textarea>
+                <div class="control-group" style="margin-bottom:6px">
+                  <input id="crashElfInput" class="input" style="flex:1" placeholder="Optional .elf path for line numbers" />
+                  <button type="button" id="decodeCrashBtn" class="btn btn-sm btn-warn">Decode Crash</button>
+                </div>
+                <div id="crashDecodeOut" class="muted"></div>
+              </div>
             </div>
           </div>
         </section>
 
       </div>
+
+      <!-- LIVE ACTIVE LEARNING X-RAY STRIP -->
+      <section id="xrayStrip" class="xray-strip">
+        <div class="xray-header">
+          <span>Active Learning X-Ray — See What the Console Just Sent: <strong id="xrayAction">Waiting for your first action...</strong></span>
+          <button type="button" class="info-btn" data-info="learning_mode">i</button>
+        </div>
+        <div class="xray-body">
+          <pre id="xrayCode" class="xray-code"># Click Connect, List Files, Check RAM, or Stop (Ctrl+C) to see live commands here!</pre>
+          <div id="xrayExplain" class="xray-explain">Every action you take in the UI reveals the real MicroPython, Serial, or esptool protocol working behind the scenes.</div>
+        </div>
+      </section>
     </main>
   </div>
-
-  <div id="toastContainer" class="toast-container"></div>
 </div>
 
+<!-- (i) INFO LEARNING DRAWER -->
+<div id="drawerBackdrop" class="drawer-backdrop"></div>
+<aside id="infoDrawer" class="info-drawer" aria-label="Information Drawer">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 id="drawerTitle" style="margin:0;font-size:18px">Feature Information</h2>
+    <button type="button" id="closeDrawerBtn" class="btn btn-sm">Close</button>
+  </div>
+  <div class="info-section"><h4>What It Does</h4><p id="drawerWhat"></p></div>
+  <div class="info-section"><h4>Why You Need It</h4><p id="drawerWhy"></p></div>
+  <div class="info-section"><h4>How It Works Under the Hood</h4><p id="drawerHow"></p></div>
+  <div id="drawerCodeWrap" class="info-section"><h4>Protocol / Example</h4><pre id="drawerCode"></pre></div>
+  <div class="info-section"><h4>Pro Tip &amp; Watch Out</h4><p id="drawerTip"></p></div>
+</aside>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="/static/js/learning.js"></script>
+<script src="/static/js/terminal.js"></script>
+<script src="/static/js/files.js"></script>
+<script src="/static/js/wifi.js"></script>
+<script src="/static/js/metrics.js"></script>
+<script src="/static/js/flasher.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
 </html>
+

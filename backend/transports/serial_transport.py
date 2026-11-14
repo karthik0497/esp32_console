@@ -25,8 +25,6 @@ def list_serial_ports() -> list[dict]:
     """Return available serial ports enriched with ESP32 hardware hints."""
     ports = []
     for p in serial.tools.list_ports.comports():
-        if p.device.startswith("/dev/ttyS") and (not p.hwid or p.hwid == "n/a"):
-            continue
         vid_pid = (p.vid, p.pid) if p.vid is not None and p.pid is not None else None
         chip_hint = KNOWN_ESP_USB.get(vid_pid, "") if vid_pid else ""
         is_likely_esp = bool(chip_hint) or any(
