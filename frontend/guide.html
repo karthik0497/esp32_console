@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Console — Kid-Friendly Guide</title>
+  <link rel="stylesheet" href="/static/css/guide.css" />
+</head>
+<body>
+  <header class="guide-header">
+    <div>
+      <h1>ESP32 Console — Step-by-Step Illustrated Guide</h1>
+    </div>
+    <div class="header-actions">
+      <a class="gbtn gbtn-primary" href="/">Open Console</a>
+      <button class="gbtn" id="toggleRawBtn" type="button">View Raw .MD</button>
+      <a class="gbtn" href="/api/guide-md?download=1">Download GUIDE.md</a>
+      <button class="gbtn" id="toggleGuideThemeBtn" type="button">Dark / Light</button>
+    </div>
+  </header>
+
+  <main class="guide-layout">
+    <aside class="toc-card">
+      <h3>Contents</h3>
+      <ul class="toc-list" id="tocList">
+        <li>Loading guide...</li>
+      </ul>
+    </aside>
+
+    <section>
+      <article class="guide-article" id="guideArticle">
+        <p>Loading friendly guide...</p>
+      </article>
+      <textarea class="raw-md-box hidden" id="rawMdBox" readonly></textarea>
+    </section>
+  </main>
+
+  <script src="/static/js/md_renderer.js"></script>
+  <script>
+    (async function () {
+      const article = document.getElementById("guideArticle");
+      const rawBox = document.getElementById("rawMdBox");
+      const tocList = document.getElementById("tocList");
+      const toggleRawBtn = document.getElementById("toggleRawBtn");
+      const themeBtn = document.getElementById("toggleGuideThemeBtn");
+
+      themeBtn.addEventListener("click", () => {
+        document.body.classList.toggle("dark-guide");
+      });
+
+      toggleRawBtn.addEventListener("click", () => {
+        const showRaw = rawBox.classList.contains("hidden");
+        rawBox.classList.toggle("hidden", !showRaw);
+        article.classList.toggle("hidden", showRaw);
+        toggleRawBtn.textContent = showRaw ? "View Formatted Guide" : "View Raw .MD";
+      });
+
+      try {
+        const resp = await fetch("/api/guide-md");
+        const md = await resp.text();
+        rawBox.value = md;
+        const { html, headings } = window.renderMarkdown(md);
+        article.innerHTML = html;
+        tocList.innerHTML = headings
+          .map(
+            (h) =>
+              `<li><a class="lvl-${h.level}" href="#${h.id}">${h.text}</a></li>`
+          )
+          .join("");
+      } catch (err) {
+        article.innerHTML = `<p>Could not load guide: ${err.message}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>
+
