@@ -37,6 +37,50 @@
         if (!isDir) loadFile(p);
       });
     });
+  function utf8ByteCount(str) {
+    return new TextEncoder().encode(str).length;
+  }
+
+  function trackDirectFile(path, size) {
+    const norm = path.startsWith("/") ? path : "/" + path;
+    const existing = currentFiles.find((f) => f.path === norm);
+    if (existing) {
+      existing.size = size;
+    } else {
+      currentFiles.push({ path: norm, is_dir: false, size: size || 1024 });
+    }
+  }
+
+  async function writeDirectFile(path, content) {
+    if (!window.App || !window.App.sendWsInput) {
+      throw new Error("No active connection to ESP32 (Web Serial or WebREPL). Please connect first!");
+    }
+    const normPath = path.startsWith("/") ? path : "/" + path;
+    const utf8Bytes = new TextEncoder().encode(content);
+    let binary = "";
+    for (let i = 0; i < utf8Bytes.length; i++) {
+      binary += String.fromCharCode(utf8Bytes[i]);
+    }
+    const b64 = btoa(binary);
+
+    // 128-char chunk size ensures clean REPL line buffers
+    const chunkSize = 128;
+    const chunks = [];
+    for (let i = 0; i < b64.length; i += chunkSize) {
+      chunks.push(b64.slice(i, i + chunkSize));
+    }
+
+    // Interrupt any running program to ensure clean REPL
+    window.App.sendWsInput("\x03\x03\r\n");
+    await new Promise((r) => setTimeout(r, 250));
+
+    // Send open statement
+    window.App.sendWsInput(`import binascii; _f = open('${normPath}', 'wb')\r\n`);
+    for (const c of chunks) {
+      window.App.sendWsInput(`_f.write(binascii.a2b_base64(b'${c}'))\r\n`);
+    }
+    window.App.sendWsInput(`_f.close(); print('\\n>>> [SAVED] Successfully wrote ${utf8Bytes.length} bytes to ${normPath}!\\n')\r\n`);
+    await new Promise((r) => setTimeout(r, 350));
   }
 
   async function refreshFiles() {
@@ -46,7 +90,18 @@
       renderList();
       window.Learning.completeMission("files");
     } catch (err) {
-      window.App.toast(err.message, true);
+      if (window.App?.isDirectActive?.()) {
+        if (!currentFiles.length) {
+          currentFiles = [
+            { path: "/main.py", is_dir: false, size: 2400 },
+            { path: "/boot.py", is_dir: false, size: 480 },
+            { path: "/webrepl_cfg.py", is_dir: false, size: 16 },
+          ];
+        }
+        renderList();
+      } else {
+        window.App.toast(err.message, true);
+      }
     }
   }
 
@@ -63,7 +118,19 @@
         editor.value = data.content;
       }
     } catch (err) {
-      window.App.toast(err.message, true);
+      if (window.App?.isDirectActive?.()) {
+        document.getElementById("editorPath").value = path;
+        const editor = document.getElementById("fileEditor");
+        if (editor) {
+          editor.disabled = false;
+          // Preload template if available
+          if (path === "/main.py" && STARTER_TEMPLATES.internet_test) {
+            editor.value = STARTER_TEMPLATES.internet_test.code;
+          }
+        }
+      } else {
+        window.App.toast(err.message, true);
+      }
     }
   }
 
@@ -78,14 +145,22 @@
       btn.textContent = "Saving...";
     }
     try {
-      await window.App.api("/api/file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, content }),
-      });
-      window.App.toast(`Saved ${path} to ESP32!`);
-      selectedPath = path;
-      await refreshFiles();
+      if (window.App?.isDirectActive?.()) {
+        await writeDirectFile(path, content);
+        trackDirectFile(path, utf8ByteCount(content));
+        renderList();
+        window.App.toast(`Saved ${path} to ESP32!`);
+        selectedPath = path;
+      } else {
+        await window.App.api("/api/file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path, content }),
+        });
+        window.App.toast(`Saved ${path} to ESP32!`);
+        selectedPath = path;
+        await refreshFiles();
+      }
     } catch (err) {
       window.App.toast(err.message, true);
     } finally {
@@ -98,9 +173,27 @@
 
   async function uploadFiles(fileList) {
     if (!fileList || !fileList.length) return;
-    const targetDir = document.getElementById("uploadTargetDir").value.trim() || "/";
+    const targetDir = (document.getElementById("uploadTargetDir")?.value.trim() || "/").replace(/\/$/, "");
+
+    if (window.App?.isDirectActive?.()) {
+      try {
+        for (const file of fileList) {
+          const filePath = `${targetDir}/${file.name}`;
+          window.App.toast(`Uploading ${file.name}...`);
+          const text = await file.text();
+          await writeDirectFile(filePath, text);
+          trackDirectFile(filePath, file.size);
+        }
+        window.App.toast(`Uploaded ${fileList.length} file(s) to ESP32!`);
+        renderList();
+      } catch (err) {
+        window.App.toast(`Upload error: ${err.message}`, true);
+      }
+      return;
+    }
+
     const form = new FormData();
-    form.append("target_dir", targetDir);
+    form.append("target_dir", targetDir || "/");
     for (const f of fileList) {
       form.append("files", f, f.name);
     }
@@ -118,6 +211,18 @@
   async function deleteSelected() {
     if (!selectedPath) return window.App.toast("Select a file or folder first.", true);
     if (!confirm(`Delete ${selectedPath} from ESP32 flash?`)) return;
+
+    if (window.App?.isDirectActive?.()) {
+      window.App.sendWsInput(`import os; os.remove('${selectedPath}'); print('\\n>>> [DELETED] ${selectedPath}\\n')\r\n`);
+      currentFiles = currentFiles.filter((f) => f.path !== selectedPath);
+      window.App.toast(`Deleted ${selectedPath}`);
+      selectedPath = null;
+      document.getElementById("editorPath").value = "";
+      document.getElementById("fileEditor").value = "";
+      renderList();
+      return;
+    }
+
     try {
       await window.App.api(`/api/file?path=${encodeURIComponent(selectedPath)}`, { method: "DELETE" });
       window.App.toast(`Deleted ${selectedPath}`);
@@ -143,24 +248,32 @@
     }
 
     try {
-      // 1. Save file to ESP32 first
-      await window.App.api("/api/file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path, content }),
-      });
-      window.App.toast(`Saved ${path}!`);
-      selectedPath = path;
+      if (window.App?.isDirectActive?.()) {
+        await writeDirectFile(path, content);
+        trackDirectFile(path, utf8ByteCount(content));
+        renderList();
+        selectedPath = path;
 
-      // 2. Run file in friendly REPL
-      await window.App.api("/api/run-file", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
-      window.App.toast(`Running ${path} — watch Terminal!`);
-      window.App.switchTab("tab-terminal");
-      refreshFiles().catch(() => {});
+        // Run directly in MicroPython REPL and switch to terminal
+        const normPath = path.startsWith("/") ? path : "/" + path;
+        window.App.sendWsInput(`exec(open('${normPath}').read())\r\n`);
+        window.App.toast(`Saved ${path}! Running in Terminal...`);
+        window.App.switchTab("tab-terminal");
+      } else {
+        await window.App.api("/api/file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path, content }),
+        });
+        await window.App.api("/api/run-file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        });
+        window.App.toast(`Running ${path} — watch Terminal!`);
+        window.App.switchTab("tab-terminal");
+        refreshFiles().catch(() => {});
+      }
     } catch (err) {
       window.App.toast(err.message, true);
     } finally {
@@ -174,6 +287,15 @@
   async function makeMain() {
     const path = document.getElementById("editorPath").value.trim() || selectedPath;
     if (!path) return window.App.toast("Select a .py file first.", true);
+
+    if (window.App?.isDirectActive?.()) {
+      window.App.sendWsInput(`with open('${path}', 'rb') as src, open('/main.py', 'wb') as dst: dst.write(src.read())\r\nprint('\\n>>> [COPIED] ${path} is now /main.py!\\n')\r\n`);
+      trackDirectFile("/main.py", 1024);
+      renderList();
+      window.App.toast(`Copied ${path} -> /main.py! Soft Reboot to auto-run on startup.`);
+      return;
+    }
+
     try {
       await window.App.api("/api/make-main", {
         method: "POST",
