@@ -222,8 +222,23 @@
         }
       }, 12000);
 
+      const cleanPass = (password || document.getElementById("webreplPassInput")?.value || "1234").trim();
+
       socket.onopen = () => {
-        window.TerminalUI?.append(`[WebREPL] Connected. Waiting for password prompt...\r\n`);
+        window.TerminalUI?.append(`[WebREPL] Connected to ESP32! Waiting for password prompt...\r\n`);
+        activeDirectTransport = {
+          type: "webrepl",
+          target: `WebREPL (${cleanHost})`,
+          write: async (t) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(t);
+            }
+          },
+          disconnect: async () => {
+            socket.close();
+            activeDirectTransport = null;
+          },
+        };
       };
 
       socket.onmessage = (ev) => {
@@ -231,25 +246,12 @@
         window.TerminalUI?.append(text);
 
         if (!authenticated && text.includes("Password:")) {
-          socket.send((password || "1234") + "\r\n");
+          socket.send(cleanPass + "\r\n");
         }
 
-        if (!authenticated && (text.includes("WebREPL connected") || text.includes(">>>"))) {
+        if (text.includes("WebREPL connected") || text.includes(">>>")) {
           authenticated = true;
           clearTimeout(authTimer);
-          activeDirectTransport = {
-            type: "webrepl",
-            target: `WebREPL (${cleanHost})`,
-            write: async (t) => {
-              if (socket.readyState === WebSocket.OPEN) {
-                socket.send(t);
-              }
-            },
-            disconnect: async () => {
-              socket.close();
-              activeDirectTransport = null;
-            },
-          };
           updateStatusUI({
             connected: true,
             state: "CONNECTED",
@@ -262,9 +264,7 @@
 
         if (text.includes("Access denied")) {
           clearTimeout(authTimer);
-          toast("WebREPL: Access denied! Incorrect password.", true);
-          socket.close();
-          reject(new Error("Access denied"));
+          toast("WebREPL: Access denied! Incorrect password. Check PASS in top bar.", true);
         }
       };
 
