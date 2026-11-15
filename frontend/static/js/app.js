@@ -132,16 +132,15 @@
     serialPort = await navigator.serial.requestPort();
     await serialPort.open({ baudRate: Number(baudRate) });
 
-    // Ensure DTR/RTS are false initially so board doesn't reset unexpectedly
-    try {
-      await serialPort.setSignals({ dataTerminalReady: false, requestToSend: false });
-    } catch (e) {}
+    // Do NOT set DTR/RTS here: calling setSignals on connect pulses the transistor circuit and boots ESP32 into ROM download mode!
 
     serialKeepReading = true;
     const textDecoder = new TextDecoderStream();
     serialPort.readable.pipeTo(textDecoder.writable).catch(() => {});
     const reader = textDecoder.readable.getReader();
     serialReader = reader;
+
+    window.TerminalUI?.append(`\r\n[USB Serial] Connected at ${baudRate} baud. (Tip: If you see gibberish characters like 'p|~', press the physical EN/RST button on your ESP32 board to reboot into normal MicroPython).\r\n`);
 
     // Start background reader loop
     (async () => {
@@ -393,8 +392,15 @@
             summary: `Could not connect to ws://${cleanHost}:8266 from https:// origin.`,
             fix: "In Brave: Click the Orange Lion icon in URL bar -> Turn Shields OFF for this site. Also ensure 'Insecure content: Allow' is set in Site settings.",
           });
+          window.TerminalUI?.append(
+            `\r\n⚠️ WebREPL Connection Blocked by Browser:\r\n` +
+            `Browser blocked unencrypted WebSocket ws://${cleanHost}:8266 from ${location.protocol}// origin.\r\n` +
+            `👉 If using Brave: Click the Orange Lion icon in the address bar -> Turn Shields OFF for this site.\r\n` +
+            `👉 If using Chrome: Click Tune/Lock icon next to URL -> Site settings -> Insecure content: Allow -> Reload page.\r\n\r\n`
+          );
         } else {
           toast(`Could not connect to WebREPL at ${cleanHost}:8266. Check Wi-Fi and IP.`, true);
+          window.TerminalUI?.append(`\r\n⚠️ WebREPL connection to ws://${cleanHost}:8266 failed. Check that ESP32 is powered on and IP is correct.\r\n`);
         }
         reject(new Error("WebSocket connection error"));
       };
@@ -677,11 +683,32 @@
     });
 
     const connMode = document.getElementById("connMode");
+    const hInput = document.getElementById("webreplHostInput");
+    const pInput = document.getElementById("webreplPassInput");
+
+    const savedHost = localStorage.getItem("esp32_webrepl_host");
+    const savedPass = localStorage.getItem("esp32_webrepl_pass");
+    if (savedHost && hInput) hInput.value = savedHost;
+    if (savedPass && pInput) pInput.value = savedPass;
+    hInput?.addEventListener("input", () => localStorage.setItem("esp32_webrepl_host", hInput.value.trim()));
+    pInput?.addEventListener("input", () => localStorage.setItem("esp32_webrepl_pass", pInput.value.trim()));
+
     if (connMode) {
+      const savedMode = localStorage.getItem("esp32_conn_mode");
+      if (savedMode) {
+        connMode.value = savedMode;
+      } else if (location.hostname.includes("vercel.app")) {
+        connMode.value = "webrepl"; // default to WebREPL on Vercel
+      }
+      const isWeb = connMode.value === "webrepl";
+      const sInputs = document.getElementById("serialInputs");
+      const wInputs = document.getElementById("webreplInputs");
+      if (sInputs) sInputs.style.display = isWeb ? "none" : "inline-flex";
+      if (wInputs) wInputs.style.display = isWeb ? "inline-flex" : "none";
+
       connMode.addEventListener("change", () => {
+        localStorage.setItem("esp32_conn_mode", connMode.value);
         const isWeb = connMode.value === "webrepl";
-        const sInputs = document.getElementById("serialInputs");
-        const wInputs = document.getElementById("webreplInputs");
         if (sInputs) sInputs.style.display = isWeb ? "none" : "inline-flex";
         if (wInputs) wInputs.style.display = isWeb ? "inline-flex" : "none";
       });
