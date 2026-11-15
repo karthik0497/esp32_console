@@ -6,8 +6,12 @@
   let paused = false;
 
   function cleanText(chunk) {
-    // Strip common ANSI escape codes while keeping clean readable text
-    return chunk.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+    if (!chunk) return "";
+    // Strip common ANSI escape codes
+    let text = chunk.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+    // Filter non-printable control characters except \r, \n, \t, and \b
+    text = text.replace(/[\x00-\x07\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, "");
+    return text;
   }
 
   function append(text) {

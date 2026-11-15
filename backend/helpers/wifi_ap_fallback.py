@@ -32,10 +32,19 @@ def save_config(ssid, password):
 
 def connect_sta(ssid, password, timeout_s=12):
     wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
+    if not wlan.active():
+        wlan.active(True)
+        time.sleep(0.5)
+    else:
+        time.sleep(0.1)
     if wlan.isconnected():
         return wlan.ifconfig()[0]
-    wlan.connect(ssid, password)
+    for _ in range(3):
+        try:
+            wlan.connect(ssid, password)
+            break
+        except OSError:
+            time.sleep(0.4)
     start = time.time()
     while not wlan.isconnected():
         if time.time() - start > timeout_s:

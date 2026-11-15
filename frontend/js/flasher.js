@@ -9,6 +9,7 @@
 
   function populatePorts(ports, sim) {
     const sel = document.getElementById("flashPortSelect");
+    if (!sel) return;
     const prev = sel.value;
     const opts = [];
     for (const p of ports || []) {
@@ -290,20 +291,22 @@
   }
 
   function init() {
-    document.getElementById("probeChipBtn").addEventListener("click", probeChip);
-    document.getElementById("eraseFlashBtn").addEventListener("click", eraseFlash);
-    document.getElementById("writeFlashBtn").addEventListener("click", writeFirmware);
-    document.getElementById("addFlashPartBtn").addEventListener("click", () => addBinPartRow("0x10000"));
-    document.getElementById("flashChipSelect").addEventListener("change", (e) => {
+    document.getElementById("probeChipBtn")?.addEventListener("click", probeChip);
+    document.getElementById("eraseFlashBtn")?.addEventListener("click", eraseFlash);
+    document.getElementById("writeFlashBtn")?.addEventListener("click", writeFirmware);
+    document.getElementById("flashWriteBtn")?.addEventListener("click", writeFirmware);
+    document.getElementById("addFlashPartBtn")?.addEventListener("click", () => addBinPartRow("0x10000"));
+    document.getElementById("flashChipSelect")?.addEventListener("change", (e) => {
       const rows = document.querySelectorAll(".flash-part-row .part-offset");
       if (rows.length === 1) {
         const chip = e.target.value;
         rows[0].value = ["esp32s2", "esp32s3", "esp32c3", "esp32c6"].includes(chip) ? "0x0" : "0x1000";
       }
     });
-    document.getElementById("presetCppOffsetsBtn").addEventListener("click", () => {
+    document.getElementById("presetCppOffsetsBtn")?.addEventListener("click", () => {
       const c = document.getElementById("flashPartsList");
-      const chip = document.getElementById("flashChipSelect").value;
+      if (!c) return;
+      const chip = document.getElementById("flashChipSelect")?.value || "esp32";
       const bootOffset = ["esp32s2", "esp32s3", "esp32c3", "esp32c6"].includes(chip) ? "0x0" : "0x1000";
       c.innerHTML = "";
       addBinPartRow(bootOffset);
@@ -312,10 +315,10 @@
       window.App.toast(`Added C++ / Arduino / ESP-IDF 3-part offsets (${bootOffset}, 0x8000, 0x10000).`);
     });
 
-    document.getElementById("inspectProjBtn").addEventListener("click", inspectProject);
-    document.getElementById("buildProjBtn").addEventListener("click", buildProject);
-    document.getElementById("sendOtaBtn").addEventListener("click", sendOta);
-    document.getElementById("decodeCrashBtn").addEventListener("click", decodeCrash);
+    document.getElementById("inspectProjBtn")?.addEventListener("click", inspectProject);
+    document.getElementById("buildProjBtn")?.addEventListener("click", buildProject);
+    document.getElementById("sendOtaBtn")?.addEventListener("click", sendOta);
+    document.getElementById("decodeCrashBtn")?.addEventListener("click", decodeCrash);
 
     loadToolchains();
   }

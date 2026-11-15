@@ -122,6 +122,12 @@ class CrashDecodeReq(BaseModel):
     elf_path: Optional[str] = None
 
 
+class ActionTrackReq(BaseModel):
+    source: str
+    action: str
+    detail: Optional[str] = ""
+
+
 # -------------------- Pages & Guide --------------------
 
 @app.get("/")
@@ -159,6 +165,7 @@ async def get_ports():
 @app.post("/api/connect")
 async def connect_device(req: ConnectReq):
     try:
+        dm.log_event("INFO", "Serial" if req.mode != "webrepl" else "WebREPL", "Connecting", f"Connecting to {req.target or req.mode} at {req.baudrate} baud")
         return await dm.connect(mode=req.mode, target=req.target, baudrate=req.baudrate, password=req.password)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -172,6 +179,7 @@ async def disconnect_device():
 @app.post("/api/control/{action}")
 async def control_device(action: str):
     try:
+        dm.log_event("INFO", "Control", f"{action}", f"Executing control command: {action}")
         if action == "interrupt":
             await dm.repl.interrupt(aggressive=False)
         elif action == "aggressive_interrupt":
@@ -343,6 +351,7 @@ async def run_health_checkup():
 @app.post("/api/metrics/gc")
 async def run_gc():
     try:
+        dm.log_event("INFO", "Memory", "Garbage Collect", "Executing gc.collect() on MicroPython heap")
         return await dm.repl.run_gc()
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -351,6 +360,7 @@ async def run_gc():
 @app.post("/api/metrics/freq")
 async def set_cpu_freq(req: FreqReq):
     try:
+        dm.log_event("INFO", "Hardware", "CPU Frequency", f"Setting CPU clock to {req.mhz} MHz")
         return await dm.repl.set_cpu_freq(req.mhz)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -359,6 +369,7 @@ async def set_cpu_freq(req: FreqReq):
 @app.post("/api/hardware/i2c-scan")
 async def i2c_scan(req: I2CScanReq):
     try:
+        dm.log_event("INFO", "Hardware", "I2C Scan", f"Scanning bus on SCL={req.scl}, SDA={req.sda}")
         return {"devices": await dm.repl.i2c_scan(scl=req.scl, sda=req.sda)}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -367,6 +378,7 @@ async def i2c_scan(req: I2CScanReq):
 @app.post("/api/hardware/gpio")
 async def gpio_control(req: GpioReq):
     try:
+        dm.log_event("INFO", "Hardware", "GPIO Action", f"Pin {req.pin} -> {req.action}")
         return await dm.repl.gpio_action(pin=req.pin, action=req.action)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -385,51 +397,111 @@ async def wifi_status():
 @app.post("/api/wifi/scan")
 async def wifi_scan():
     try:
-        return {"networks": await dm.repl.wifi_scan()}
+        nets = await dm.repl.wifi_scan()
+        dm.log_event("SUCCESS", "Wi-Fi", "Scan Completed", f"Discovered {len(nets)} 2.4 GHz access points")
+        return {"networks": nets}
     except Exception as exc:
+        dm.log_event("ERROR", "Wi-Fi", "Scan Failed", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/api/wifi/connect")
 async def wifi_connect(req: WifiConnectReq):
     try:
-        return await dm.repl.wifi_connect(
+        res = await dm.repl.wifi_connect(
             ssid=req.ssid,
             password=req.password,
             save_config=req.save_config,
             install_ap_fallback=req.install_ap_fallback,
         )
+        if res.get("connected"):
+            dm.log_event("SUCCESS", "Wi-Fi", "Wi-Fi Connected", f"Connected to {req.ssid} (IP: {res.get('ifconfig')})")
+        else:
+            dm.log_event("WARN", "Wi-Fi", "Wi-Fi Connect Failed", f"Could not obtain IP from {req.ssid}. Check password.")
+        return res
     except Exception as exc:
+        dm.log_event("ERROR", "Wi-Fi", "Wi-Fi Connect Error", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/api/wifi/ap")
 async def wifi_ap(req: WifiApReq):
     try:
-        return await dm.repl.wifi_ap(ssid=req.ssid, password=req.password)
+        res = await dm.repl.wifi_ap(ssid=req.ssid, password=req.password)
+        dm.log_event("SUCCESS", "Wi-Fi", "Hotspot Started", f"Access Point '{req.ssid}' active at 192.168.4.1")
+        return res
     except Exception as exc:
+        dm.log_event("ERROR", "Wi-Fi", "Hotspot Error", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/api/webrepl/setup")
 async def setup_webrepl(req: WebReplSetupReq):
     try:
-        return await dm.repl.setup_webrepl(password=req.password)
+        res = await dm.repl.setup_webrepl(password=req.password)
+        if res.get("started"):
+            dm.log_event("SUCCESS", "WebREPL", "WebREPL Started", f"Daemon active on port 8266 (IP: {res.get('ip')})")
+        else:
+            dm.log_event("INFO", "WebREPL", "WebREPL Configured", "Saved password to /webrepl_cfg.py; awaiting Wi-Fi IP")
+        return res
     except Exception as exc:
+        dm.log_event("ERROR", "WebREPL", "WebREPL Setup Error", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.post("/api/wifi/initial-setup")
 async def initial_wireless_setup(req: InitialWirelessSetupReq):
     try:
-        return await dm.repl.initial_wireless_setup(
+        res = await dm.repl.initial_wireless_setup(
             ssid=req.ssid,
             wifi_password=req.wifi_password,
             webrepl_password=req.webrepl_password,
             install_ap_fallback=req.install_ap_fallback,
         )
+        dm.log_event("SUCCESS", "Provisioning", "1-Click Setup Complete", f"Wi-Fi & WebREPL provisioned for {req.ssid}")
+        return res
     except Exception as exc:
+        dm.log_event("ERROR", "Provisioning", "1-Click Setup Error", str(exc))
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+# -------------------- Activity & System Logs --------------------
+
+@app.get("/api/logs")
+async def get_activity_logs():
+    return {"logs": list(dm.activity_logs)}
+
+
+@app.post("/api/logs/track-action")
+async def track_user_action(req: ActionTrackReq):
+    dm.log_event("UI_ACTION", req.source, req.action, req.detail or "")
+    return {"ok": True}
+
+
+@app.get("/api/logs/download")
+async def download_activity_logs():
+    from backend.device_manager import LOG_FILE_PATH
+    if not LOG_FILE_PATH.exists():
+        LOG_FILE_PATH.write_text("=== ESP32 Console Activity Log ===\n", encoding="utf-8")
+    return FileResponse(
+        str(LOG_FILE_PATH),
+        media_type="text/plain",
+        filename="esp32_activity.log",
+        headers={"Content-Disposition": "attachment; filename=esp32_activity.log"},
+    )
+
+
+@app.post("/api/logs/clear")
+async def clear_activity_logs():
+    from backend.device_manager import LOG_FILE_PATH
+    dm.activity_logs.clear()
+    try:
+        with open(LOG_FILE_PATH, "w", encoding="utf-8") as f:
+            f.write(f"=== ESP32 Console Activity Log Cleared at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+    except Exception:
+        pass
+    dm.log_event("INFO", "System", "Logs Cleared", "Activity logs cleared by user")
+    return {"ok": True}
 
 
 # -------------------- Flasher & Other Languages --------------------

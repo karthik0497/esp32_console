@@ -7,8 +7,13 @@
   function toast(msg, isError = false) {
     const box = document.getElementById("toastContainer");
     const el = document.createElement("div");
+    let displayMsg = String(msg || "");
+    if (displayMsg.toLowerCase().includes("no esp32 connected") || displayMsg.toLowerCase().includes("connect to an esp32")) {
+      displayMsg = "⚠️ Not connected to ESP32! In the top bar, choose Mode (USB Serial or WebREPL) and click Connect.";
+      isError = true;
+    }
     el.className = `toast ${isError ? "error" : ""}`;
-    el.textContent = msg;
+    el.textContent = displayMsg;
     box.appendChild(el);
     setTimeout(() => el.remove(), 4200);
   }
@@ -24,8 +29,15 @@
   }
 
   function switchTab(tabId) {
-    document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tabId));
-    document.querySelectorAll(".tab-pane").forEach((p) => p.classList.toggle("active", p.id === tabId));
+    const target = tabId.startsWith("tab-") ? tabId : `tab-${tabId}`;
+    document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === target));
+    document.querySelectorAll(".tab-pane").forEach((p) => p.classList.toggle("active", p.id === target));
+    if (target === "tab-health" && currentStatus.connected) {
+      window.MetricsUI?.sampleMetrics?.();
+    }
+    if (target === "tab-files" && currentStatus.connected) {
+      window.FilesUI?.refreshFiles?.();
+    }
   }
 
   function updateStatusUI(s) {
@@ -64,21 +76,40 @@
     try {
       const data = await api("/api/ports");
       const sel = document.getElementById("portSelect");
+      if (!sel) return;
       const prev = sel.value;
       const options = [];
-      for (const p of data.ports || []) {
-        options.push(`<option value="${p.port}">${p.port} — ${p.chip_hint}</option>`);
+      const ports = data.ports || [];
+
+      // Sort likely ESP32 USB ports to top
+      ports.sort((a, b) => {
+        if (a.likely_esp32 && !b.likely_esp32) return -1;
+        if (!a.likely_esp32 && b.likely_esp32) return 1;
+        return a.port.localeCompare(b.port);
+      });
+
+      for (const p of ports) {
+        const star = p.likely_esp32 ? "★ " : "";
+        options.push(`<option value="${p.port}">${star}${p.port} — ${p.chip_hint}</option>`);
       }
       if (data.simulator) {
-        options.push(`<option value="SIMULATOR">SIMULATOR — Virtual Demo ESP32-S3 (No Hardware Needed)</option>`);
+        options.push(`<option value="SIMULATOR">SIMULATOR — Virtual Demo ESP32-S3</option>`);
       }
       sel.innerHTML = options.join("");
-      if (prev && [...sel.options].some((o) => o.value === prev)) {
+
+      if (data.status && data.status.connected && data.status.target) {
+        sel.value = data.status.target;
+      } else if (prev && [...sel.options].some((o) => o.value === prev)) {
         sel.value = prev;
-      } else if (!(data.ports || []).length) {
+      } else if (ports.length > 0) {
+        sel.value = ports[0].port;
+      } else if (data.simulator) {
         sel.value = "SIMULATOR";
       }
-      window.FlasherUI.populatePorts(data.ports, data.simulator);
+
+      if (window.FlasherUI && window.FlasherUI.populatePorts) {
+        window.FlasherUI.populatePorts(ports, data.simulator);
+      }
       if (data.status) updateStatusUI(data.status);
     } catch (err) {
       toast(err.message, true);
@@ -147,6 +178,7 @@
       else if (msg.type === "metric") window.MetricsUI.updateView(msg.data);
       else if (msg.type === "flash") window.FlasherUI.handleProgress(msg.data);
       else if (msg.type === "alert") showAlert(msg.data);
+      else if (msg.type === "log" && window.LogsUI) window.LogsUI.appendLiveLog(msg.data);
     };
     ws.onclose = () => {
       setTimeout(connectWebSocket, 1500);
@@ -160,40 +192,45 @@
   }
 
   function init() {
-    window.Learning.init();
-    window.TerminalUI.init();
-    window.FilesUI.init();
-    window.WifiUI.init();
-    window.MetricsUI.init();
-    window.FlasherUI.init();
+    try { window.Learning?.init(); } catch (e) { console.error("Learning init error", e); }
+    try { window.TerminalUI?.init(); } catch (e) { console.error("TerminalUI init error", e); }
+    try { window.FilesUI?.init(); } catch (e) { console.error("FilesUI init error", e); }
+    try { window.WifiUI?.init(); } catch (e) { console.error("WifiUI init error", e); }
+    try { window.MetricsUI?.init(); } catch (e) { console.error("MetricsUI init error", e); }
+    try { window.FlasherUI?.init(); } catch (e) { console.error("FlasherUI init error", e); }
+    try { window.LogsUI?.init(); } catch (e) { console.error("LogsUI init error", e); }
 
     document.querySelectorAll(".nav-item").forEach((btn) => {
       btn.addEventListener("click", () => switchTab(btn.dataset.tab));
     });
 
     const connMode = document.getElementById("connMode");
-    connMode.addEventListener("change", () => {
-      const isWeb = connMode.value === "webrepl";
-      document.getElementById("serialInputs").style.display = isWeb ? "none" : "inline-flex";
-      document.getElementById("webreplInputs").style.display = isWeb ? "inline-flex" : "none";
-    });
+    if (connMode) {
+      connMode.addEventListener("change", () => {
+        const isWeb = connMode.value === "webrepl";
+        const sInputs = document.getElementById("serialInputs");
+        const wInputs = document.getElementById("webreplInputs");
+        if (sInputs) sInputs.style.display = isWeb ? "none" : "inline-flex";
+        if (wInputs) wInputs.style.display = isWeb ? "inline-flex" : "none";
+      });
+    }
 
-    document.getElementById("refreshPortsBtn").addEventListener("click", refreshPorts);
-    document.getElementById("connectBtn").addEventListener("click", toggleConnect);
-    document.getElementById("stopBtn").addEventListener("click", () => runControl("interrupt"));
-    document.getElementById("forceStopBtn").addEventListener("click", () => runControl("aggressive_interrupt"));
-    document.getElementById("softResetBtn").addEventListener("click", () => runControl("soft_reset"));
-    document.getElementById("hardResetBtn").addEventListener("click", () => runControl("hard_reset"));
-    document.getElementById("safeRecoveryBtn").addEventListener("click", () => {
+    document.getElementById("refreshPortsBtn")?.addEventListener("click", refreshPorts);
+    document.getElementById("connectBtn")?.addEventListener("click", toggleConnect);
+    document.getElementById("stopBtn")?.addEventListener("click", () => runControl("interrupt"));
+    document.getElementById("forceStopBtn")?.addEventListener("click", () => runControl("aggressive_interrupt"));
+    document.getElementById("softResetBtn")?.addEventListener("click", () => runControl("soft_reset"));
+    document.getElementById("hardResetBtn")?.addEventListener("click", () => runControl("hard_reset"));
+    document.getElementById("safeRecoveryBtn")?.addEventListener("click", () => {
       const disable = confirm("Do you also want to rename /main.py -> /main.py.bak so a runaway loop won't freeze on next boot?\n\nClick OK to rename main.py, or Cancel to just reset & stop.");
       runControl(disable ? "safe_recovery_disable_main" : "safe_recovery");
     });
 
-    document.getElementById("dismissAlertBtn").addEventListener("click", () => {
-      document.getElementById("alertBanner").classList.add("hidden");
+    document.getElementById("dismissAlertBtn")?.addEventListener("click", () => {
+      document.getElementById("alertBanner")?.classList.add("hidden");
     });
 
-    document.getElementById("themeToggleBtn").addEventListener("click", () => {
+    document.getElementById("themeToggleBtn")?.addEventListener("click", () => {
       document.body.classList.toggle("light-theme");
     });
 

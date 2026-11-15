@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections import deque
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import WebSocket
@@ -11,8 +12,11 @@ from backend.engines.crash_decoder import detect_log_alert
 from backend.engines.micropython_repl import MicroPythonReplEngine
 from backend.transports.base import DeviceTransport
 from backend.transports.serial_transport import SerialTransport, list_serial_ports
+from pathlib import Path
 from backend.transports.simulator_transport import SimulatorTransport
 from backend.transports.webrepl_transport import WebReplTransport
+
+LOG_FILE_PATH = Path(__file__).resolve().parent.parent / "esp32_activity.log"
 
 
 class DeviceManager:
@@ -29,11 +33,39 @@ class DeviceManager:
         self._line_buf: str = ""
         self.term_history: deque[str] = deque(maxlen=150)
         self.xray_history: deque[dict] = deque(maxlen=40)
+        self.activity_logs: deque[dict] = deque(maxlen=300)
         self.repl = MicroPythonReplEngine(
             get_transport=lambda: self.transport,
             lock=self.lock,
             on_xray=self._handle_xray,
         )
+        self.log_event("INFO", "System", "Server Started", "ESP32 Console backend initialized and ready")
+
+    def log_event(self, level: str, source: str, action: str, message: str, detail: Optional[str] = None) -> dict:
+        now_dt = datetime.now()
+        entry = {
+            "id": len(self.activity_logs) + 1,
+            "timestamp": now_dt.strftime("%H:%M:%S"),
+            "level": level.upper(),
+            "source": source,
+            "action": action,
+            "message": message,
+            "detail": detail or "",
+        }
+        self.activity_logs.append(entry)
+
+        # Write to persistent log file on disk
+        try:
+            line = f"[{now_dt.strftime('%Y-%m-%d %H:%M:%S')}] [{entry['level']}] [{entry['source']}] {entry['action']}: {entry['message']}"
+            if entry["detail"]:
+                line += f" | {entry['detail']}"
+            with open(LOG_FILE_PATH, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:
+            pass
+
+        self._broadcast_sync({"type": "log", "data": entry})
+        return entry
 
     def _broadcast_sync(self, payload: dict) -> None:
         if not self._ws_clients:
@@ -149,6 +181,7 @@ class DeviceManager:
         self.state = "DISCONNECTED"
         self.target_label = "Not Connected"
         self.capabilities = {}
+        self.log_event("WARN", "Transport", "Disconnected", reason)
         self._broadcast_sync({"type": "alert", "data": {"severity": "warn", "title": "Device Disconnected", "summary": reason, "fix": "Check USB cable or Wi-Fi connection and click Connect again."}})
         self._broadcast_sync({"type": "state", "data": self.status_snapshot()})
 
@@ -180,13 +213,18 @@ class DeviceManager:
                 "explanation": "Opens the USB-UART connection with DTR/RTS disabled so your ESP32 doesn't accidentally reboot when the console opens.",
             })
 
-        info = await tr.connect()
-        self.transport = tr
-        self.target_label = info["target"]
-        self.capabilities = info["capabilities"]
-        self.state = "CONNECTED"
-        await self.broadcast({"type": "state", "data": self.status_snapshot()})
-        return self.status_snapshot()
+        try:
+            info = await tr.connect()
+            self.transport = tr
+            self.target_label = info["target"]
+            self.capabilities = info["capabilities"]
+            self.state = "CONNECTED"
+            self.log_event("SUCCESS", "Serial" if mode != "webrepl" else "WebREPL", "Connected", f"Connected to {self.target_label}")
+            await self.broadcast({"type": "state", "data": self.status_snapshot()})
+            return self.status_snapshot()
+        except Exception as exc:
+            self.log_event("ERROR", "Transport", "Connection Failed", str(exc))
+            raise
 
     async def disconnect(self) -> dict:
         if self.transport:
@@ -195,6 +233,7 @@ class DeviceManager:
             except Exception:
                 pass
             self.transport = None
+            self.log_event("INFO", "Transport", "Disconnected", f"Closed connection to {self.target_label}")
         self.state = "DISCONNECTED"
         self.target_label = "Not Connected"
         self.capabilities = {}
