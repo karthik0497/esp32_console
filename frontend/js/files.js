@@ -63,24 +63,28 @@
     }
     const b64 = btoa(binary);
 
-    // 128-char chunk size ensures clean REPL line buffers
-    const chunkSize = 128;
-    const chunks = [];
-    for (let i = 0; i < b64.length; i += chunkSize) {
-      chunks.push(b64.slice(i, i + chunkSize));
-    }
-
-    // Interrupt any running program to ensure clean REPL
-    window.App.sendWsInput("\x03\x03\r\n");
+    // 1. Interrupt any running script and enter MicroPython Raw REPL mode (Ctrl+A)
+    // Raw REPL disables character echo, preventing UART/socket buffer overflows.
+    window.App.sendWsInput("\r\n\x03\x03");
+    await new Promise((r) => setTimeout(r, 200));
+    window.App.sendWsInput("\x01");
     await new Promise((r) => setTimeout(r, 250));
 
-    // Send open statement
-    window.App.sendWsInput(`import binascii; _f = open('${normPath}', 'wb')\r\n`);
-    for (const c of chunks) {
-      window.App.sendWsInput(`_f.write(binascii.a2b_base64(b'${c}'))\r\n`);
-    }
-    window.App.sendWsInput(`_f.close(); print('\\n>>> [SAVED] Successfully wrote ${utf8Bytes.length} bytes to ${normPath}!\\n')\r\n`);
-    await new Promise((r) => setTimeout(r, 350));
+    // 2. Prepare Python raw execution code
+    const pyScript = `import binascii
+b = """${b64}"""
+with open('${normPath}', 'wb') as _f:
+    _f.write(binascii.a2b_base64(b))
+print('\\n>>> [SAVED] Successfully wrote ${utf8Bytes.length} bytes to ${normPath}!\\n')
+`;
+
+    // 3. Send payload followed by Ctrl+D (execute in Raw REPL)
+    window.App.sendWsInput(pyScript + "\x04");
+    await new Promise((r) => setTimeout(r, 600));
+
+    // 4. Send Ctrl+B to return to friendly normal REPL mode
+    window.App.sendWsInput("\x02");
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   async function refreshFiles() {
@@ -254,11 +258,14 @@
         renderList();
         selectedPath = path;
 
-        // Run directly in MicroPython REPL and switch to terminal
-        const normPath = path.startsWith("/") ? path : "/" + path;
-        window.App.sendWsInput(`exec(open('${normPath}').read())\r\n`);
-        window.App.toast(`Saved ${path}! Running in Terminal...`);
+        // Switch to terminal tab FIRST so output is immediately visible
         window.App.switchTab("tab-terminal");
+        window.App.toast(`Saved ${path}! Running in Terminal...`);
+
+        // Run directly in MicroPython REPL
+        const normPath = path.startsWith("/") ? path : "/" + path;
+        await new Promise((r) => setTimeout(r, 300));
+        window.App.sendWsInput(`\r\nexec(open('${normPath}').read())\r\n`);
       } else {
         await window.App.api("/api/file", {
           method: "POST",
