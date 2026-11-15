@@ -8,6 +8,9 @@
 
   // Direct client-side transports for Vercel / standalone browser
   let activeDirectTransport = null; // { type: 'serial'|'webrepl', target: str, write: fn, disconnect: fn, hardReset: fn }
+  let activeDirectSocket = null;
+  let isConnecting = false;
+  let reconnectTimer = null;
   let serialPort = null;
   let serialReader = null;
   let serialKeepReading = false;
@@ -199,9 +202,37 @@
   // ----------------- Browser Direct WebREPL Transport -----------------
 
   function connectDirectWebRepl(host, password) {
+    if (isConnecting) {
+      toast("Connection attempt already in progress...");
+      return Promise.reject(new Error("Connection in progress"));
+    }
+    isConnecting = true;
+
+    const connBtn = document.getElementById("connectBtn");
+    if (connBtn) {
+      connBtn.textContent = "Connecting...";
+      connBtn.disabled = true;
+    }
+
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    if (activeDirectSocket) {
+      try { activeDirectSocket.close(); } catch (e) {}
+      activeDirectSocket = null;
+    }
+    if (activeDirectTransport) {
+      activeDirectTransport = null;
+    }
+
     return new Promise((resolve, reject) => {
-      const cleanHost = host.replace("ws://", "").replace("wss://", "").split("/")[0].trim();
-      const url = `ws://${cleanHost}:8266/`;
+      const cleanHost = (host || "192.168.1.11").replace("ws://", "").replace("wss://", "").split("/")[0].trim();
+      const url = cleanHost.includes(":") ? `ws://${cleanHost}/` : `ws://${cleanHost}:8266/`;
+      const passInput = document.getElementById("webreplPassInput")?.value;
+      const cleanPass = (password !== undefined && password !== null && password !== "" ? String(password) : (passInput || "1234")).trim() || "1234";
+
       toast(`Connecting directly to WebREPL at ${cleanHost}...`);
       window.TerminalUI?.append(`\r\n[WebREPL] Connecting to ${url}...\r\n`);
 
@@ -209,7 +240,13 @@
       try {
         socket = new WebSocket(url);
         socket.binaryType = "arraybuffer";
+        activeDirectSocket = socket;
       } catch (err) {
+        isConnecting = false;
+        if (connBtn) {
+          connBtn.textContent = "Connect";
+          connBtn.disabled = false;
+        }
         toast(`Failed to create WebSocket: ${err.message}`, true);
         return reject(err);
       }
@@ -226,18 +263,18 @@
       let pendingBinaryTransfer = null;
 
       const putFile = (destName, fileBytes) => {
-        return new Promise((resolve, reject) => {
+        return new Promise((res, rej) => {
           if (!socket || socket.readyState !== WebSocket.OPEN) {
-            return reject(new Error("WebREPL socket is not connected"));
+            return rej(new Error("WebREPL socket is not connected"));
           }
           if (pendingBinaryTransfer) {
-            return reject(new Error("Another file transfer is already in progress"));
+            return rej(new Error("Another file transfer is already in progress"));
           }
 
           const rawName = destName.replace(/^\//, "");
           const nameBytes = new TextEncoder().encode(rawName);
           if (nameBytes.length > 64) {
-            return reject(new Error("Filename too long for WebREPL (max 64 bytes)"));
+            return rej(new Error("Filename too long for WebREPL (max 64 bytes)"));
           }
 
           const bytes = fileBytes instanceof Uint8Array ? fileBytes : new TextEncoder().encode(fileBytes);
@@ -263,7 +300,7 @@
           const timeout = setTimeout(() => {
             if (pendingBinaryTransfer) {
               pendingBinaryTransfer = null;
-              reject(new Error("WebREPL file transfer timed out (15s)"));
+              rej(new Error("WebREPL file transfer timed out (15s)"));
             }
           }, 15000);
 
@@ -271,15 +308,15 @@
             state: 11, // waiting for header ack
             destName: rawName,
             fileBytes: bytes,
-            resolve: (res) => {
+            resolve: (val) => {
               clearTimeout(timeout);
               pendingBinaryTransfer = null;
-              resolve(res);
+              res(val);
             },
             reject: (err) => {
               clearTimeout(timeout);
               pendingBinaryTransfer = null;
-              reject(err);
+              rej(err);
             },
           };
 
@@ -308,8 +345,16 @@
           },
           putFile: putFile,
           disconnect: async () => {
-            socket.close();
+            if (reconnectTimer) {
+              clearTimeout(reconnectTimer);
+              reconnectTimer = null;
+            }
+            if (activeDirectSocket) {
+              try { activeDirectSocket.close(); } catch (e) {}
+              activeDirectSocket = null;
+            }
             activeDirectTransport = null;
+            updateStatusUI({ connected: false, state: "DISCONNECTED", capabilities: {} });
           },
         };
       };
@@ -366,7 +411,12 @@
 
         if (text.includes("WebREPL connected") || text.includes(">>>")) {
           authenticated = true;
+          isConnecting = false;
           clearTimeout(authTimer);
+          if (connBtn) {
+            connBtn.disabled = false;
+            connBtn.textContent = "Disconnect";
+          }
           updateStatusUI({
             connected: true,
             state: "CONNECTED",
@@ -385,6 +435,12 @@
 
       socket.onerror = () => {
         clearTimeout(authTimer);
+        isConnecting = false;
+        activeDirectSocket = null;
+        if (connBtn) {
+          connBtn.disabled = false;
+          connBtn.textContent = "Connect";
+        }
         if (location.protocol === "https:") {
           toast("⚠️ WebREPL connection failed (Brave Shields or Mixed Content).", true);
           showAlert({
@@ -407,6 +463,12 @@
 
       socket.onclose = () => {
         clearTimeout(authTimer);
+        isConnecting = false;
+        activeDirectSocket = null;
+        if (connBtn) {
+          connBtn.disabled = false;
+          connBtn.textContent = "Connect";
+        }
         if (!authenticated) {
           window.TerminalUI?.append(`\r\n[WebREPL] Connection closed. (Note: MicroPython drops connection immediately if password in PASS is rejected! Check PASS in top toolbar).\r\n`);
           toast("WebREPL closed. Verify password (PASS) and retry.", true);
@@ -477,7 +539,17 @@
   }
 
   async function toggleConnect() {
-    if (currentStatus.connected) {
+    if (isConnecting) {
+      toast("Connection attempt already in progress...");
+      return;
+    }
+
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+
+    if (currentStatus.connected || activeDirectTransport) {
       if (activeDirectTransport) {
         await activeDirectTransport.disconnect();
         updateStatusUI({ connected: false, state: "DISCONNECTED", capabilities: {} });
@@ -584,21 +656,25 @@
         toast("Soft Reboot (Ctrl+D)...");
 
         if (isWebRepl) {
+          if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+          }
           window.TerminalUI?.append("[WebREPL] Reconnecting automatically in 3.5s...\r\n");
           let attempt = 1;
           const tryReconnect = () => {
-            if (activeDirectTransport) return;
+            if (activeDirectTransport || isConnecting) return;
             window.TerminalUI?.append(`[WebREPL] Reconnecting (attempt ${attempt}/3)...\r\n`);
             connectDirectWebRepl(host, pass).catch((e) => {
               attempt++;
-              if (attempt <= 3 && !activeDirectTransport) {
-                setTimeout(tryReconnect, 2500);
+              if (attempt <= 3 && !activeDirectTransport && !isConnecting) {
+                reconnectTimer = setTimeout(tryReconnect, 2500);
               } else {
                 toast(`Auto-reconnect failed: ${e.message}`, true);
               }
             });
           };
-          setTimeout(tryReconnect, 3500);
+          reconnectTimer = setTimeout(tryReconnect, 3500);
         }
       } else if (action === "hard_reset") {
         if (activeDirectTransport.hardReset) {
@@ -608,7 +684,11 @@
           toast("Hard reset is only supported over USB Serial.", true);
         }
       } else if (action === "safe_recovery" || action === "safe_recovery_disable_main") {
-        await activeDirectTransport.write("\x03\x03\x04");
+        if (action === "safe_recovery_disable_main") {
+          await activeDirectTransport.write("\r\n\x03\x03\r\nimport os\r\ntry:\n os.rename('/main.py', '/main.py.bak')\n print('\\n>>> [RECOVERED] Disabled /main.py -> /main.py.bak\\n')\r\nexcept Exception as e:\n print('\\n>>> Note:', e)\r\n\x04");
+        } else {
+          await activeDirectTransport.write("\x03\x03\x04");
+        }
         toast("Safe Recovery triggered (Interrupt + Soft Reboot)");
       }
       return;
