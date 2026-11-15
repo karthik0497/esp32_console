@@ -155,11 +155,59 @@
     const ssid = document.getElementById("wifiSsid").value.trim();
     const wifi_password = document.getElementById("wifiPass").value;
     const webrepl_password = document.getElementById("webreplSetupPass").value || "1234";
-    const install_ap_fallback = document.getElementById("wifiApFallback").checked;
+    const install_ap_fallback = document.getElementById("wifiApFallback")?.checked;
     if (!ssid) return window.App.toast("Enter or select your 2.4 GHz Wi-Fi SSID first.", true);
 
     btn.disabled = true;
     btn.textContent = "Provisioning...";
+
+    const isLocal = location.hostname === "127.0.0.1" || location.hostname === "localhost";
+    if (!isLocal || !window.App.isBackendAvailable?.()) {
+      try {
+        window.App.toast("Provisioning Wi-Fi & WebREPL via Web Serial...");
+        if (window.App.sendWsInput) {
+          window.App.sendWsInput("\x03\x03");
+        }
+        await new Promise((r) => setTimeout(r, 350));
+
+        const setupScript =
+          "import os, network, time\r\n" +
+          "with open('/webrepl_cfg.py', 'w') as f: f.write('PASS = " + JSON.stringify(webrepl_password).slice(1, -1) + "\\n')\r\n" +
+          "with open('/wifi_config.json', 'w') as f: f.write(" + JSON.stringify(JSON.stringify({ ssid, password: wifi_password })) + ")\r\n" +
+          "boot_code = '''import network, time\\ntry:\\n import webrepl\\n webrepl.start()\\nexcept:\\n pass\\nw=network.WLAN(network.STA_IF)\\nw.active(True)\\nif not w.isconnected():\\n w.connect(" + JSON.stringify(ssid) + ", " + JSON.stringify(wifi_password) + ")\\n for _ in range(12):\\n  if w.isconnected(): break\\n  time.sleep(1)\\nif w.isconnected():\\n try:\\n  import webrepl\\n  webrepl.start()\\n except:\\n  pass\\n'''\r\n" +
+          "with open('/boot.py', 'w') as f: f.write(boot_code)\r\n" +
+          "w = network.WLAN(network.STA_IF); w.active(True); w.connect(" + JSON.stringify(ssid) + ", " + JSON.stringify(wifi_password) + ")\r\n" +
+          "for _ in range(15):\r\n" +
+          " if w.isconnected(): break\r\n" +
+          " time.sleep(1)\r\n" +
+          "if w.isconnected():\r\n" +
+          " ip = w.ifconfig()[0]\r\n" +
+          " print('\\n>>> [SUCCESS] Connected! IP:', ip, '| WebREPL ready at ws://' + ip + ':8266 <<<\\n')\r\n" +
+          " try:\r\n" +
+          "  import webrepl\r\n" +
+          "  webrepl.start()\r\n" +
+          " except:\r\n" +
+          "  pass\r\n" +
+          "else:\r\n" +
+          " print('\\n>>> [FAILED] Could not connect to Wi-Fi. Check SSID/Password. <<<\\n')\r\n";
+
+        window.App.sendWsInput(setupScript);
+
+        const summary = document.getElementById("initialSetupSummary");
+        if (summary) {
+          summary.innerHTML = `✅ Provisioning command sent to ESP32! Connecting to <code>${ssid}</code>... Check <strong>1. Connect</strong> terminal to see assigned IP address.`;
+        }
+        window.App.toast("Setup command sent to ESP32! Check Terminal.");
+        return;
+      } catch (err) {
+        window.App.toast("Setup Error: " + err.message, true);
+        return;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "1-Click Full Wi-Fi + WebREPL Setup";
+      }
+    }
+
     try {
       const res = await window.App.api("/api/wifi/initial-setup", {
         method: "POST",

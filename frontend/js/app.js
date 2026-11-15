@@ -565,6 +565,14 @@
     connectWebSocket();
   }
 
-  window.App = { api, toast, switchTab, sendWsInput, refreshPorts };
+  window.App = {
+    api,
+    toast,
+    switchTab,
+    sendWsInput,
+    refreshPorts,
+    isDirectActive: () => Boolean(activeDirectTransport),
+    isBackendAvailable: () => backendAvailable,
+  };
   document.addEventListener("DOMContentLoaded", init);
 })();
