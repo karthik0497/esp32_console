@@ -93,6 +93,10 @@
     });
 
     function performFactoryWipe() {
+      if (!window.App?.isDirectActive?.() && (!window.App?.state || !window.App?.state.connected)) {
+        window.App?.toast("Please connect to ESP32 (via USB or WebREPL) first!", true);
+        return;
+      }
       const ok = confirm("⚠️ FACTORY WIPE ESP32?\n\nThis will DELETE all files (main.py, boot.py, wifi_config.json, webrepl_cfg.py) and reset Wi-Fi credentials.\n\nAre you sure you want to start from scratch?");
       if (!ok) return;
 
@@ -127,7 +131,6 @@
 
     document.getElementById("wipeAllBtn")?.addEventListener("click", performFactoryWipe);
     document.getElementById("wipeFilesTabBtn")?.addEventListener("click", performFactoryWipe);
-    document.getElementById("topWipeBtn")?.addEventListener("click", performFactoryWipe);
   }
 
   window.TerminalUI = { init, append, sendCommand };
