@@ -91,6 +91,42 @@
         sendCommand(btn.dataset.cmd);
       });
     });
+
+    function performFactoryWipe() {
+      const ok = confirm("⚠️ FACTORY WIPE ESP32?\n\nThis will DELETE all files (main.py, boot.py, wifi_config.json, webrepl_cfg.py) and reset Wi-Fi credentials.\n\nAre you sure you want to start from scratch?");
+      if (!ok) return;
+
+      window.App?.toast("💣 Wiping all files and resetting Wi-Fi...");
+      append("\r\n[WIPE] Resetting Wi-Fi and deleting all flash files...\r\n");
+
+      // Interrupt running program first
+      if (window.App?.sendWsInput) {
+        window.App.sendWsInput("\x03\x03");
+      }
+
+      setTimeout(() => {
+        const wipeCmd = "import os, network, machine\r\n" +
+          "w = network.WLAN(network.STA_IF); w.active(True); w.disconnect(); w.active(False)\r\n" +
+          "ap = network.WLAN(network.AP_IF); ap.active(False)\r\n" +
+          "def _w(p=''):\r\n" +
+          " for f in os.ilistdir(p):\r\n" +
+          "  x = (p + '/' + f[0]) if p else f[0]\r\n" +
+          "  if f[1] == 0x4000:\r\n" +
+          "   _w(x)\r\n" +
+          "   try: os.rmdir(x)\r\n" +
+          "   except: pass\r\n" +
+          "  else:\r\n" +
+          "   try: os.remove(x)\r\n" +
+          "   except: pass\r\n" +
+          "_w()\r\n" +
+          "print('\\n>>> [WIPE SUCCESSFUL] All files deleted & Wi-Fi reset! Rebooting ESP32...\\n')\r\n" +
+          "machine.reset()\r\n";
+        sendCommand(wipeCmd);
+      }, 350);
+    }
+
+    document.getElementById("wipeAllBtn")?.addEventListener("click", performFactoryWipe);
+    document.getElementById("wipeFilesTabBtn")?.addEventListener("click", performFactoryWipe);
   }
 
   window.TerminalUI = { init, append, sendCommand };

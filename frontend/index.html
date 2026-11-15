@@ -185,6 +185,7 @@
               <button type="button" id="macroRamBtn" class="btn btn-sm btn-subtle macro-btn" data-cmd="import gc; print('Free RAM:', gc.mem_free(), 'bytes')">Free RAM</button>
               <button type="button" id="macroWifiBtn" class="btn btn-sm btn-subtle macro-btn" data-cmd="import network; sta = network.WLAN(network.STA_IF); print('IP:', sta.ifconfig())">Check IP</button>
               <button type="button" id="macroScanBtn" class="btn btn-sm btn-subtle macro-btn" data-cmd="import machine; i2c = machine.SoftI2C(scl=machine.Pin(22), sda=machine.Pin(21)); print('I2C Devices:', [hex(x) for x in i2c.scan()])">I2C Scan</button>
+              <button type="button" id="wipeAllBtn" class="btn btn-sm btn-danger" style="margin-left:6px" title="Completely erase all files, wifi config, and webrepl to start from scratch">💣 Wipe All (Factory Reset)</button>
             </div>
           </div>
 
@@ -277,6 +278,7 @@
                 <div style="display:flex;gap:4px">
                   <button type="button" id="refreshFilesBtn" class="btn btn-sm btn-subtle" title="Refresh files">⟳</button>
                   <button type="button" id="newFileBtn" class="btn btn-sm btn-subtle">+ New</button>
+                  <button type="button" id="wipeFilesTabBtn" class="btn btn-sm btn-danger" title="Completely erase all files from ESP32">💣 Wipe</button>
                 </div>
               </div>
 
