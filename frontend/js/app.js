@@ -51,6 +51,40 @@
     if (target === "tab-files" && currentStatus.connected && window.FilesUI?.refreshFiles) {
       window.FilesUI.refreshFiles();
     }
+    if (target === "tab-logs" && window.LogsUI?.fetchLogs) {
+      window.LogsUI.fetchLogs();
+    }
+  }
+
+  let deviceLineBuffer = "";
+  function processDeviceStdout(chunk, transportType) {
+    if (!chunk || !window.LogsUI?.log) return;
+    deviceLineBuffer += chunk;
+    if (deviceLineBuffer.length > 8192) {
+      deviceLineBuffer = deviceLineBuffer.slice(-4096);
+    }
+    const lines = deviceLineBuffer.split(/\r?\n/);
+    deviceLineBuffer = lines.pop() || "";
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (line === ">>>" || line === "..." || line === ">>> " || line === "Password:") continue;
+
+      let level = "INFO";
+      let action = "stdout";
+      const src = transportType === "serial" ? "Serial" : "WebREPL";
+      if (line.includes("Traceback") || line.includes("Error:") || line.includes("SyntaxError") || line.includes("panic")) {
+        level = "ERROR";
+        action = "Exception";
+      } else if (line.includes("WARNING") || line.includes("⚠️") || line.includes("Warning")) {
+        level = "WARN";
+        action = "Warning";
+      } else if (line.includes("Connected") || line.includes("SUCCESS") || line.includes("🎉") || line.includes("✅")) {
+        level = "SUCCESS";
+        action = "Status";
+      }
+      window.LogsUI.log(level, src, action, line);
+    }
   }
 
   function updateStatusUI(s) {
@@ -144,6 +178,7 @@
     serialReader = reader;
 
     window.TerminalUI?.append(`\r\n[USB Serial] Connected at ${baudRate} baud. (Tip: If you see gibberish characters like 'p|~', press the physical EN/RST button on your ESP32 board to reboot into normal MicroPython).\r\n`);
+    window.LogsUI?.log("SUCCESS", "Serial", "Connected", `Connected via Web Serial at ${baudRate} baud`);
 
     // Start background reader loop
     (async () => {
@@ -153,6 +188,7 @@
           if (done) break;
           if (value) {
             window.TerminalUI?.append(value);
+            processDeviceStdout(value, "serial");
           }
         }
       } catch (err) {
@@ -177,6 +213,7 @@
           serialPort = null;
         }
         activeDirectTransport = null;
+        window.LogsUI?.log("INFO", "Serial", "Disconnected", "Web Serial disconnected");
       },
       hardReset: async () => {
         if (!serialPort) return;
@@ -184,6 +221,7 @@
           await serialPort.setSignals({ dataTerminalReady: false, requestToSend: true });
           await new Promise((r) => setTimeout(r, 120));
           await serialPort.setSignals({ dataTerminalReady: false, requestToSend: false });
+          window.LogsUI?.log("INFO", "Control", "Hard Reset", "Toggled EN pin via serial DTR/RTS");
         } catch (e) {
           console.warn("Hard reset error:", e);
         }
@@ -235,6 +273,7 @@
 
       toast(`Connecting directly to WebREPL at ${cleanHost}...`);
       window.TerminalUI?.append(`\r\n[WebREPL] Connecting to ${url}...\r\n`);
+      window.LogsUI?.log("INFO", "WebREPL", "Connecting", `Opening socket to ws://${cleanHost}:8266/...`);
 
       let socket;
       try {
@@ -248,6 +287,7 @@
           connBtn.disabled = false;
         }
         toast(`Failed to create WebSocket: ${err.message}`, true);
+        window.LogsUI?.log("ERROR", "WebREPL", "Socket Init Error", err.message);
         return reject(err);
       }
 
@@ -256,6 +296,7 @@
       const authTimer = setTimeout(() => {
         if (!authenticated && socket.readyState === WebSocket.OPEN) {
           toast("WebREPL connection timed out waiting for password.", true);
+          window.LogsUI?.log("WARN", "WebREPL", "Timeout", "Timed out waiting for authentication");
           socket.close();
         }
       }, 12000);
@@ -329,12 +370,14 @@
         if (!authenticated && !passSent && socket.readyState === WebSocket.OPEN) {
           passSent = true;
           window.TerminalUI?.append(`[WebREPL] Sending password...\r\n`);
+          window.LogsUI?.log("INFO", "WebREPL", "Auth", "Sending WebREPL password");
           socket.send(cleanPass + "\r\n");
         }
       };
 
       socket.onopen = () => {
         window.TerminalUI?.append(`[WebREPL] Connected to ESP32! Waiting for password prompt...\r\n`);
+        window.LogsUI?.log("INFO", "WebREPL", "Socket Open", `Connected to ${cleanHost}:8266, waiting for password prompt...`);
         activeDirectTransport = {
           type: "webrepl",
           target: `WebREPL (${cleanHost})`,
@@ -354,6 +397,7 @@
               activeDirectSocket = null;
             }
             activeDirectTransport = null;
+            window.LogsUI?.log("INFO", "WebREPL", "Disconnected", "WebREPL session ended by user");
             updateStatusUI({ connected: false, state: "DISCONNECTED", capabilities: {} });
           },
         };
@@ -404,6 +448,7 @@
           text = new TextDecoder().decode(ev.data);
         }
         window.TerminalUI?.append(text);
+        processDeviceStdout(text, "webrepl");
 
         if (!authenticated && text.includes("Password:")) {
           sendPass();
@@ -424,12 +469,14 @@
             capabilities: { hard_reset: false, repl: true },
           });
           toast(`Connected to WebREPL (${cleanHost})!`);
+          window.LogsUI?.log("SUCCESS", "WebREPL", "Connected", `Authenticated & connected to ESP32 at ${cleanHost}`);
           resolve();
         }
 
         if (text.includes("Access denied")) {
           clearTimeout(authTimer);
           toast("WebREPL: Access denied! Incorrect password. Check PASS in top bar.", true);
+          window.LogsUI?.log("ERROR", "WebREPL", "Auth Failed", "Access denied: incorrect password in PASS");
         }
       };
 
@@ -441,6 +488,7 @@
           connBtn.disabled = false;
           connBtn.textContent = "Connect";
         }
+        window.LogsUI?.log("ERROR", "WebREPL", "Connection Error", `Failed to connect to ws://${cleanHost}:8266`);
         if (location.protocol === "https:") {
           toast("⚠️ WebREPL connection failed (Brave Shields or Mixed Content).", true);
           showAlert({
@@ -469,6 +517,7 @@
           connBtn.disabled = false;
           connBtn.textContent = "Connect";
         }
+        window.LogsUI?.log("WARN", "WebREPL", "Connection Closed", "Socket closed by host or client");
         if (!authenticated) {
           window.TerminalUI?.append(`\r\n[WebREPL] Connection closed. (Note: MicroPython drops connection immediately if password in PASS is rejected! Check PASS in top toolbar).\r\n`);
           toast("WebREPL closed. Verify password (PASS) and retry.", true);
@@ -637,6 +686,7 @@
 
   async function runControl(action) {
     if (activeDirectTransport) {
+      window.LogsUI?.log("INFO", "Control", action, `Triggered ${action}`);
       if (action === "interrupt") {
         await activeDirectTransport.write("\r\n\x03\x03\r\n");
         window.TerminalUI?.append("\r\n[Control] Sent Ctrl+C (Interrupt)\r\n");

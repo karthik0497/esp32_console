@@ -63,6 +63,7 @@
 
     window.TerminalUI?.append(`\r\n[Files] Writing ${normPath} (${utf8Bytes.length} bytes) to ESP32 flash...\r\n`);
     window.App.toast(`Saving ${normPath} (${utf8Bytes.length} bytes)...`);
+    window.LogsUI?.log("INFO", "Files", "Save File", `Writing ${normPath} (${utf8Bytes.length} bytes) to flash`);
 
     // 1. Try native WebREPL binary transfer if connected via WebREPL
     const transport = window.App?.getActiveTransport?.();
@@ -71,6 +72,7 @@
         await transport.putFile(fileName, utf8Bytes);
         window.TerminalUI?.append(`[Files] ✅ ${normPath} (${utf8Bytes.length} bytes) saved to ESP32 flash via WebREPL!\r\n>>> `);
         window.App.toast(`Saved ${normPath} (${utf8Bytes.length} bytes)!`);
+        window.LogsUI?.log("SUCCESS", "Files", "File Saved", `Saved ${normPath} (${utf8Bytes.length} bytes) via WebREPL`);
         return;
       } catch (binErr) {
         console.warn("WebREPL binary transfer note, falling back to base64 write:", binErr);
@@ -221,9 +223,11 @@
           trackDirectFile(filePath, file.size);
         }
         window.App.toast(`Uploaded ${fileList.length} file(s) to ESP32!`);
+        window.LogsUI?.log("SUCCESS", "Files", "Upload", `Uploaded ${fileList.length} file(s) to ${targetDir}`);
         renderList();
       } catch (err) {
         window.App.toast(`Upload error: ${err.message}`, true);
+        window.LogsUI?.log("ERROR", "Files", "Upload Error", err.message);
       }
       return;
     }
@@ -238,6 +242,7 @@
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "Upload failed");
       window.App.toast(`Uploaded ${data.uploaded.length} file(s) to ${targetDir}`);
+      window.LogsUI?.log("SUCCESS", "Files", "Upload", `Uploaded ${data.uploaded.length} file(s) to ${targetDir}`);
       await refreshFiles();
     } catch (err) {
       window.App.toast(err.message, true);
@@ -252,6 +257,7 @@
       window.App.sendWsInput(`import os; os.remove('${selectedPath}'); print('\\n>>> [DELETED] ${selectedPath}\\n')\r\n`);
       currentFiles = currentFiles.filter((f) => f.path !== selectedPath);
       window.App.toast(`Deleted ${selectedPath}`);
+      window.LogsUI?.log("WARN", "Files", "Delete", `Deleted ${selectedPath} from ESP32`);
       selectedPath = null;
       document.getElementById("editorPath").value = "";
       document.getElementById("fileEditor").value = "";
@@ -262,6 +268,7 @@
     try {
       await window.App.api(`/api/file?path=${encodeURIComponent(selectedPath)}`, { method: "DELETE" });
       window.App.toast(`Deleted ${selectedPath}`);
+      window.LogsUI?.log("WARN", "Files", "Delete", `Deleted ${selectedPath} from ESP32`);
       selectedPath = null;
       document.getElementById("editorPath").value = "";
       document.getElementById("fileEditor").value = "";
@@ -293,6 +300,7 @@
         // 1. Switch to terminal tab FIRST so user sees live progress immediately!
         window.App.switchTab("tab-terminal");
         window.App.toast(`Saving ${path}...`);
+        window.LogsUI?.log("INFO", "Runner", "Save & Run", `Executing ${path} on ESP32...`);
 
         // 2. Interrupt any previous running loop on the ESP32
         window.App.sendWsInput("\r\n\x03\x03\r\n");
@@ -324,11 +332,13 @@
         });
         window.App.toast(`Running ${path} — watch Terminal!`);
         window.App.switchTab("tab-terminal");
+        window.LogsUI?.log("INFO", "Runner", "Save & Run", `Executing ${path} on ESP32...`);
         refreshFiles().catch(() => {});
       }
     } catch (err) {
       window.App.toast(err.message, true);
       window.TerminalUI?.append(`\r\n[Save & Run Error] ${err.message}\r\n`);
+      window.LogsUI?.log("ERROR", "Runner", "Run Error", err.message);
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -346,6 +356,7 @@
       trackDirectFile("/main.py", 1024);
       renderList();
       window.App.toast(`Copied ${path} -> /main.py! Soft Reboot to auto-run on startup.`);
+      window.LogsUI?.log("SUCCESS", "Files", "Make Main", `Copied ${path} to /main.py`);
       return;
     }
 
