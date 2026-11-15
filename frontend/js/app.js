@@ -209,12 +209,14 @@
       let socket;
       try {
         socket = new WebSocket(url);
+        socket.binaryType = "arraybuffer";
       } catch (err) {
         toast(`Failed to create WebSocket: ${err.message}`, true);
         return reject(err);
       }
 
       let authenticated = false;
+      let passSent = false;
       const authTimer = setTimeout(() => {
         if (!authenticated && socket.readyState === WebSocket.OPEN) {
           toast("WebREPL connection timed out waiting for password.", true);
@@ -223,6 +225,14 @@
       }, 12000);
 
       const cleanPass = (password || document.getElementById("webreplPassInput")?.value || "1234").trim();
+
+      const sendPass = () => {
+        if (!authenticated && !passSent && socket.readyState === WebSocket.OPEN) {
+          passSent = true;
+          window.TerminalUI?.append(`[WebREPL] Sending password...\r\n`);
+          socket.send(cleanPass + "\r\n");
+        }
+      };
 
       socket.onopen = () => {
         window.TerminalUI?.append(`[WebREPL] Connected to ESP32! Waiting for password prompt...\r\n`);
@@ -242,11 +252,18 @@
       };
 
       socket.onmessage = (ev) => {
-        const text = typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data);
+        let text = "";
+        if (typeof ev.data === "string") {
+          text = ev.data;
+        } else if (ev.data instanceof ArrayBuffer) {
+          text = new TextDecoder().decode(ev.data);
+        } else if (ev.data instanceof Uint8Array) {
+          text = new TextDecoder().decode(ev.data);
+        }
         window.TerminalUI?.append(text);
 
         if (!authenticated && text.includes("Password:")) {
-          socket.send(cleanPass + "\r\n");
+          sendPass();
         }
 
         if (text.includes("WebREPL connected") || text.includes(">>>")) {
@@ -285,6 +302,10 @@
 
       socket.onclose = () => {
         clearTimeout(authTimer);
+        if (!authenticated) {
+          window.TerminalUI?.append(`\r\n[WebREPL] Connection closed. (Note: MicroPython drops connection immediately if password in PASS is rejected! Check PASS in top toolbar).\r\n`);
+          toast("WebREPL closed. Verify password (PASS) and retry.", true);
+        }
         if (activeDirectTransport && activeDirectTransport.type === "webrepl") {
           activeDirectTransport = null;
           updateStatusUI({ connected: false, state: "DISCONNECTED", capabilities: {} });
