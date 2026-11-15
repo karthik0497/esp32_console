@@ -37,6 +37,8 @@
         if (!isDir) loadFile(p);
       });
     });
+  }
+
   function utf8ByteCount(str) {
     return new TextEncoder().encode(str).length;
   }
