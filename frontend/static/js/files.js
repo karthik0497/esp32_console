@@ -52,39 +52,37 @@
   }
 
   async function writeDirectFile(path, content) {
-    if (!window.App || !window.App.sendWsInput) {
-      throw new Error("No active connection to ESP32 (Web Serial or WebREPL). Please connect first!");
+    if (!window.App || !window.App.sendWsInput || !window.App.isDirectActive()) {
+      throw new Error("Not connected! Please click 'Connect' in the top toolbar first.");
     }
     const normPath = path.startsWith("/") ? path : "/" + path;
     const utf8Bytes = new TextEncoder().encode(content);
-    let binary = "";
-    for (let i = 0; i < utf8Bytes.length; i++) {
-      binary += String.fromCharCode(utf8Bytes[i]);
-    }
-    const b64 = btoa(binary);
 
-    // 1. Interrupt any running script and enter MicroPython Raw REPL mode (Ctrl+A)
-    // Raw REPL disables character echo, preventing UART/socket buffer overflows.
-    window.App.sendWsInput("\r\n\x03\x03");
+    window.TerminalUI?.append(`\r\n[Files] Writing ${normPath} (${utf8Bytes.length} bytes) to ESP32 flash...\r\n`);
+    window.App.toast(`Saving ${normPath} (${utf8Bytes.length} bytes)...`);
+
+    // 1. Interrupt any running script to get clean REPL prompt
+    window.App.sendWsInput("\r\n\x03\x03\r\n");
     await new Promise((r) => setTimeout(r, 200));
-    window.App.sendWsInput("\x01");
-    await new Promise((r) => setTimeout(r, 250));
 
-    // 2. Prepare Python raw execution code
-    const pyScript = `import binascii
-b = """${b64}"""
-with open('${normPath}', 'wb') as _f:
-    _f.write(binascii.a2b_base64(b))
-print('\\n>>> [SAVED] Successfully wrote ${utf8Bytes.length} bytes to ${normPath}!\\n')
-`;
+    // 2. Open file for writing
+    window.App.sendWsInput(`_f = open('${normPath}', 'w')\r\n`);
+    await new Promise((r) => setTimeout(r, 100));
 
-    // 3. Send payload followed by Ctrl+D (execute in Raw REPL)
-    window.App.sendWsInput(pyScript + "\x04");
-    await new Promise((r) => setTimeout(r, 600));
+    // 3. Write line by line using JSON string literals (safe across WebREPL and USB)
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const lineStr = lines[i] + (i < lines.length - 1 ? "\n" : "");
+      const jsonLit = JSON.stringify(lineStr);
+      window.App.sendWsInput(`_f.write(${jsonLit})\r\n`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
 
-    // 4. Send Ctrl+B to return to friendly normal REPL mode
-    window.App.sendWsInput("\x02");
-    await new Promise((r) => setTimeout(r, 250));
+    // 4. Close file and print success
+    window.App.sendWsInput(`_f.close()\r\n`);
+    await new Promise((r) => setTimeout(r, 100));
+    window.App.sendWsInput(`print('\\n>>> [FILE SAVED] ${normPath} (${utf8Bytes.length} bytes) saved successfully!\\n')\r\n`);
+    await new Promise((r) => setTimeout(r, 150));
   }
 
   async function refreshFiles() {
@@ -139,6 +137,11 @@ print('\\n>>> [SAVED] Successfully wrote ${utf8Bytes.length} bytes to ${normPath
   }
 
   async function saveEditorFile() {
+    if (!window.App?.isDirectActive?.() && !window.App?.isBackendAvailable?.()) {
+      window.App.toast("⚠️ Not connected to ESP32! Please click Connect in the top toolbar first.", true);
+      window.TerminalUI?.append("\r\n⚠️ Cannot Save: Not connected to ESP32. Please click Connect in the top toolbar first!\r\n");
+      return;
+    }
     const path = document.getElementById("editorPath").value.trim();
     const content = document.getElementById("fileEditor").value;
     if (!path) return window.App.toast("Enter a destination file path (e.g. /main.py)", true);
@@ -240,6 +243,11 @@ print('\\n>>> [SAVED] Successfully wrote ${utf8Bytes.length} bytes to ${normPath
   }
 
   async function saveAndRun() {
+    if (!window.App?.isDirectActive?.() && !window.App?.isBackendAvailable?.()) {
+      window.App.toast("⚠️ Not connected to ESP32! Please click Connect in the top toolbar first.", true);
+      window.TerminalUI?.append("\r\n⚠️ Cannot Save & Run: Not connected to ESP32. Please click Connect in the top toolbar first!\r\n");
+      return;
+    }
     const path = document.getElementById("editorPath").value.trim() || selectedPath || "/main.py";
     const content = document.getElementById("fileEditor").value;
     if (!path) return window.App.toast("Enter a destination file path (e.g. /main.py)", true);

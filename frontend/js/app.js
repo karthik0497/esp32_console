@@ -461,15 +461,33 @@
   async function runControl(action) {
     if (activeDirectTransport) {
       if (action === "interrupt") {
-        await activeDirectTransport.write("\x03\x03");
+        await activeDirectTransport.write("\r\n\x03\x03\r\n");
+        window.TerminalUI?.append("\r\n[Control] Sent Ctrl+C (Interrupt)\r\n");
         window.Learning?.completeMission?.("stop");
         toast("Sent Ctrl+C (Interrupt)");
       } else if (action === "aggressive_interrupt") {
-        await activeDirectTransport.write("\x03\x03\x03\x03\x03");
+        await activeDirectTransport.write("\r\n\x03\x03\x03\x03\x03\r\n");
+        window.TerminalUI?.append("\r\n[Control] Sent Ctrl+C Burst\r\n");
         toast("Sent Ctrl+C Burst");
       } else if (action === "soft_reset") {
+        const isWebRepl = activeDirectTransport.type === "webrepl";
+        const host = document.getElementById("webreplHostInput")?.value || "192.168.1.11";
+        const pass = document.getElementById("webreplPassInput")?.value || "1234";
+
         await activeDirectTransport.write("\x04");
-        toast("Sent Ctrl+D (Soft Reboot)");
+        window.TerminalUI?.append("\r\n[Control] Sent Ctrl+D (Soft Reboot). ESP32 is rebooting...\r\n");
+        toast("Soft Reboot (Ctrl+D)...");
+
+        if (isWebRepl) {
+          window.TerminalUI?.append("[WebREPL] Reconnecting automatically in 3.5s...\r\n");
+          setTimeout(() => {
+            if (!activeDirectTransport) {
+              connectDirectWebRepl(host, pass).catch((e) => {
+                toast(`Auto-reconnect: ${e.message}`, true);
+              });
+            }
+          }, 3500);
+        }
       } else if (action === "hard_reset") {
         if (activeDirectTransport.hardReset) {
           await activeDirectTransport.hardReset();
