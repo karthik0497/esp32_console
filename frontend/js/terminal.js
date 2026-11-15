@@ -127,6 +127,7 @@
 
     document.getElementById("wipeAllBtn")?.addEventListener("click", performFactoryWipe);
     document.getElementById("wipeFilesTabBtn")?.addEventListener("click", performFactoryWipe);
+    document.getElementById("topWipeBtn")?.addEventListener("click", performFactoryWipe);
   }
 
   window.TerminalUI = { init, append, sendCommand };

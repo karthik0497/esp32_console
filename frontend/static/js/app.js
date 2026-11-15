@@ -78,12 +78,14 @@
     const caps = s.capabilities || {};
     const stopBtn = document.getElementById("stopBtn");
     const forceStopBtn = document.getElementById("forceStopBtn");
+    const topWipeBtn = document.getElementById("topWipeBtn");
     const softResetBtn = document.getElementById("softResetBtn");
     const hardResetBtn = document.getElementById("hardResetBtn");
     const safeRecoveryBtn = document.getElementById("safeRecoveryBtn");
 
     if (stopBtn) stopBtn.disabled = !s.connected;
     if (forceStopBtn) forceStopBtn.disabled = !s.connected;
+    if (topWipeBtn) topWipeBtn.disabled = !s.connected;
     if (softResetBtn) softResetBtn.disabled = !s.connected;
     if (hardResetBtn) hardResetBtn.disabled = !s.connected || !caps.hard_reset;
     if (safeRecoveryBtn) safeRecoveryBtn.disabled = !s.connected;
