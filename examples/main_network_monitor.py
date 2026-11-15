@@ -9,10 +9,43 @@ ESP32 Network & Internet Data Monitor (MicroPython main.py)
 """
 
 import gc
+import json
 import machine
 import network
+import socket
 import time
-import urequests
+
+try:
+    import urequests
+except ImportError:
+    class URequestsFallback:
+        @staticmethod
+        def get(url, timeout=6):
+            # Lightweight socket HTTP GET fallback for vanilla MicroPython
+            proto, dummy, host, path = url.split("/", 3) if url.count("/") >= 3 else (url.split("/")[0], "", url.split("/")[2], "")
+            path = "/" + path
+            s = socket.socket()
+            s.settimeout(timeout)
+            s.connect((host, 80))
+            s.send(f"GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: MicroPython-ESP32\r\n\r\n".encode())
+            res = b""
+            while True:
+                c = s.recv(512)
+                if not c:
+                    break
+                res += c
+            s.close()
+            parts = res.split(b"\r\n\r\n", 1)
+            body = parts[1].decode("utf-8") if len(parts) > 1 else "{}"
+            class Response:
+                def __init__(self, text):
+                    self.text = text
+                def json(self):
+                    return json.loads(self.text)
+                def close(self):
+                    pass
+            return Response(body)
+    urequests = URequestsFallback()
 
 # Onboard blue LED (Pin 2 on standard ESP32 boards)
 led = machine.Pin(2, machine.Pin.OUT)

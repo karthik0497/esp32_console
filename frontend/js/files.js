@@ -58,31 +58,51 @@
       throw new Error("Not connected! Please click 'Connect' in the top toolbar first.");
     }
     const normPath = path.startsWith("/") ? path : "/" + path;
+    const fileName = normPath.replace(/^\//, "");
     const utf8Bytes = new TextEncoder().encode(content);
 
     window.TerminalUI?.append(`\r\n[Files] Writing ${normPath} (${utf8Bytes.length} bytes) to ESP32 flash...\r\n`);
     window.App.toast(`Saving ${normPath} (${utf8Bytes.length} bytes)...`);
 
-    // 1. Interrupt any running script to get clean REPL prompt
-    window.App.sendWsInput("\r\n\x03\x03\r\n");
-    await new Promise((r) => setTimeout(r, 200));
-
-    // 2. Open file for writing
-    window.App.sendWsInput(`_f = open('${normPath}', 'w')\r\n`);
-    await new Promise((r) => setTimeout(r, 100));
-
-    // 3. Write line by line using JSON string literals (safe across WebREPL and USB)
-    const lines = content.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const lineStr = lines[i] + (i < lines.length - 1 ? "\n" : "");
-      const jsonLit = JSON.stringify(lineStr);
-      window.App.sendWsInput(`_f.write(${jsonLit})\r\n`);
-      await new Promise((r) => setTimeout(r, 25));
+    // 1. Try native WebREPL binary transfer if connected via WebREPL
+    const transport = window.App?.getActiveTransport?.();
+    if (transport?.type === "webrepl" && typeof transport.putFile === "function") {
+      try {
+        await transport.putFile(fileName, utf8Bytes);
+        window.TerminalUI?.append(`[Files] ✅ ${normPath} (${utf8Bytes.length} bytes) saved to ESP32 flash via WebREPL!\r\n>>> `);
+        window.App.toast(`Saved ${normPath} (${utf8Bytes.length} bytes)!`);
+        return;
+      } catch (binErr) {
+        console.warn("WebREPL binary transfer note, falling back to base64 write:", binErr);
+        window.TerminalUI?.append(`\r\n[Files] WebREPL binary note: ${binErr.message}. Trying safe REPL write...\r\n`);
+      }
     }
 
-    // 4. Close file and print success
-    window.App.sendWsInput(`_f.close()\r\n`);
+    // 2. Safe base64 chunked write for Web Serial (USB) or fallback
+    window.App.sendWsInput("\r\n\x03\x03\r\n");
+    await new Promise((r) => setTimeout(r, 250));
+
+    window.App.sendWsInput("import ubinascii\r\n");
     await new Promise((r) => setTimeout(r, 100));
+    window.App.sendWsInput(`_f = open('${normPath}', 'wb')\r\n`);
+    await new Promise((r) => setTimeout(r, 150));
+
+    let binary = "";
+    const len = utf8Bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(utf8Bytes[i]);
+    }
+    const b64 = btoa(binary);
+
+    const chunkSize = 256;
+    for (let offset = 0; offset < b64.length; offset += chunkSize) {
+      const chunk = b64.slice(offset, offset + chunkSize);
+      window.App.sendWsInput(`_f.write(ubinascii.a2b_base64('${chunk}'))\r\n`);
+      await new Promise((r) => setTimeout(r, 80));
+    }
+
+    window.App.sendWsInput(`_f.close()\r\n`);
+    await new Promise((r) => setTimeout(r, 150));
     window.App.sendWsInput(`print('\\n>>> [FILE SAVED] ${normPath} (${utf8Bytes.length} bytes) saved successfully!\\n')\r\n`);
     await new Promise((r) => setTimeout(r, 150));
   }
@@ -158,7 +178,7 @@
         await writeDirectFile(path, content);
         trackDirectFile(path, utf8ByteCount(content));
         renderList();
-        window.App.toast(`Saved ${path} to ESP32!`);
+        window.App.toast(`✅ Saved ${path} to ESP32!`);
         selectedPath = path;
       } else {
         await window.App.api("/api/file", {
@@ -166,16 +186,23 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ path, content }),
         });
-        window.App.toast(`Saved ${path} to ESP32!`);
+        window.App.toast(`✅ Saved ${path} to ESP32!`);
         selectedPath = path;
         await refreshFiles();
       }
+      if (btn) {
+        btn.textContent = "✅ Saved!";
+        setTimeout(() => {
+          if (btn && btn.textContent === "✅ Saved!") btn.textContent = origText;
+        }, 1500);
+      }
     } catch (err) {
       window.App.toast(err.message, true);
+      window.TerminalUI?.append(`\r\n[Files Error] ${err.message}\r\n`);
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = origText;
+        if (btn.textContent === "Saving...") btn.textContent = origText;
       }
     }
   }
@@ -263,16 +290,24 @@
 
     try {
       if (window.App?.isDirectActive?.()) {
+        // 1. Switch to terminal tab FIRST so user sees live progress immediately!
+        window.App.switchTab("tab-terminal");
+        window.App.toast(`Saving ${path}...`);
+
+        // 2. Interrupt any previous running loop on the ESP32
+        window.App.sendWsInput("\r\n\x03\x03\r\n");
+        await new Promise((r) => setTimeout(r, 200));
+
+        // 3. Write file cleanly
         await writeDirectFile(path, content);
         trackDirectFile(path, utf8ByteCount(content));
         renderList();
         selectedPath = path;
 
-        // Switch to terminal tab FIRST so output is immediately visible
-        window.App.switchTab("tab-terminal");
         window.App.toast(`Saved ${path}! Running in Terminal...`);
+        window.TerminalUI?.append(`\r\n[Runner] Executing ${path}...\r\n`);
 
-        // Run directly in MicroPython REPL
+        // 4. Run directly in MicroPython REPL
         const normPath = path.startsWith("/") ? path : "/" + path;
         await new Promise((r) => setTimeout(r, 300));
         window.App.sendWsInput(`\r\nexec(open('${normPath}').read())\r\n`);
@@ -293,6 +328,7 @@
       }
     } catch (err) {
       window.App.toast(err.message, true);
+      window.TerminalUI?.append(`\r\n[Save & Run Error] ${err.message}\r\n`);
     } finally {
       if (btn) {
         btn.disabled = false;

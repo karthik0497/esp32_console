@@ -224,7 +224,70 @@
         }
       }, 12000);
 
-      const cleanPass = (password || document.getElementById("webreplPassInput")?.value || "1234").trim();
+      let pendingBinaryTransfer = null;
+
+      const putFile = (destName, fileBytes) => {
+        return new Promise((resolve, reject) => {
+          if (!socket || socket.readyState !== WebSocket.OPEN) {
+            return reject(new Error("WebREPL socket is not connected"));
+          }
+          if (pendingBinaryTransfer) {
+            return reject(new Error("Another file transfer is already in progress"));
+          }
+
+          const rawName = destName.replace(/^\//, "");
+          const nameBytes = new TextEncoder().encode(rawName);
+          if (nameBytes.length > 64) {
+            return reject(new Error("Filename too long for WebREPL (max 64 bytes)"));
+          }
+
+          const bytes = fileBytes instanceof Uint8Array ? fileBytes : new TextEncoder().encode(fileBytes);
+          const fsize = bytes.length;
+
+          // Header struct: "<2sBBQLH64s" = 2 + 1 + 1 + 8 + 4 + 2 + 64 = 82 bytes
+          const rec = new Uint8Array(82);
+          rec[0] = 0x57; // 'W'
+          rec[1] = 0x41; // 'A'
+          rec[2] = 1;    // WEBREPL_PUT_FILE = 1
+          rec[3] = 0;    // reserved
+          // rec[4..11] = 0 (offset uint64)
+          rec[12] = fsize & 0xff;
+          rec[13] = (fsize >> 8) & 0xff;
+          rec[14] = (fsize >> 16) & 0xff;
+          rec[15] = (fsize >> 24) & 0xff;
+          rec[16] = nameBytes.length & 0xff;
+          rec[17] = (nameBytes.length >> 8) & 0xff;
+          for (let i = 0; i < 64; i++) {
+            rec[18 + i] = i < nameBytes.length ? nameBytes[i] : 0;
+          }
+
+          const timeout = setTimeout(() => {
+            if (pendingBinaryTransfer) {
+              pendingBinaryTransfer = null;
+              reject(new Error("WebREPL file transfer timed out (15s)"));
+            }
+          }, 15000);
+
+          pendingBinaryTransfer = {
+            state: 11, // waiting for header ack
+            destName: rawName,
+            fileBytes: bytes,
+            resolve: (res) => {
+              clearTimeout(timeout);
+              pendingBinaryTransfer = null;
+              resolve(res);
+            },
+            reject: (err) => {
+              clearTimeout(timeout);
+              pendingBinaryTransfer = null;
+              reject(err);
+            },
+          };
+
+          // Send header binary frame
+          socket.send(rec);
+        });
+      };
 
       const sendPass = () => {
         if (!authenticated && !passSent && socket.readyState === WebSocket.OPEN) {
@@ -244,6 +307,7 @@
               socket.send(t);
             }
           },
+          putFile: putFile,
           disconnect: async () => {
             socket.close();
             activeDirectTransport = null;
@@ -252,6 +316,41 @@
       };
 
       socket.onmessage = (ev) => {
+        // Intercept binary response if WebREPL file transfer is in progress
+        if (pendingBinaryTransfer && (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array)) {
+          const u8 = ev.data instanceof Uint8Array ? ev.data : new Uint8Array(ev.data);
+          // MicroPython responds with 4-byte signature: "WB" (0x57, 0x42) + 2-byte code (LE)
+          if (u8.length >= 4 && u8[0] === 0x57 && u8[1] === 0x42) {
+            const code = u8[2] | (u8[3] << 8);
+            if (pendingBinaryTransfer.state === 11) {
+              // First response (header acknowledged)
+              if (code === 0) {
+                // Send file content in 1024-byte chunks
+                const fb = pendingBinaryTransfer.fileBytes;
+                if (fb.length === 0) {
+                  socket.send(new Uint8Array(0));
+                } else {
+                  for (let offset = 0; offset < fb.length; offset += 1024) {
+                    socket.send(fb.slice(offset, offset + 1024));
+                  }
+                }
+                pendingBinaryTransfer.state = 12;
+              } else {
+                pendingBinaryTransfer.reject(new Error(`WebREPL rejected file header for ${pendingBinaryTransfer.destName} (code: ${code})`));
+              }
+              return;
+            } else if (pendingBinaryTransfer.state === 12) {
+              // Final response (file saved and closed)
+              if (code === 0) {
+                pendingBinaryTransfer.resolve({ success: true, bytes: pendingBinaryTransfer.fileBytes.length });
+              } else {
+                pendingBinaryTransfer.reject(new Error(`WebREPL failed saving ${pendingBinaryTransfer.destName} to flash (code: ${code})`));
+              }
+              return;
+            }
+          }
+        }
+
         let text = "";
         if (typeof ev.data === "string") {
           text = ev.data;
@@ -480,13 +579,20 @@
 
         if (isWebRepl) {
           window.TerminalUI?.append("[WebREPL] Reconnecting automatically in 3.5s...\r\n");
-          setTimeout(() => {
-            if (!activeDirectTransport) {
-              connectDirectWebRepl(host, pass).catch((e) => {
-                toast(`Auto-reconnect: ${e.message}`, true);
-              });
-            }
-          }, 3500);
+          let attempt = 1;
+          const tryReconnect = () => {
+            if (activeDirectTransport) return;
+            window.TerminalUI?.append(`[WebREPL] Reconnecting (attempt ${attempt}/3)...\r\n`);
+            connectDirectWebRepl(host, pass).catch((e) => {
+              attempt++;
+              if (attempt <= 3 && !activeDirectTransport) {
+                setTimeout(tryReconnect, 2500);
+              } else {
+                toast(`Auto-reconnect failed: ${e.message}`, true);
+              }
+            });
+          };
+          setTimeout(tryReconnect, 3500);
         }
       } else if (action === "hard_reset") {
         if (activeDirectTransport.hardReset) {
@@ -610,6 +716,7 @@
     switchTab,
     sendWsInput,
     refreshPorts,
+    getActiveTransport: () => activeDirectTransport,
     isDirectActive: () => Boolean(activeDirectTransport),
     isBackendAvailable: () => backendAvailable,
   };
