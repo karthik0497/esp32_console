@@ -2,16 +2,16 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/static/(.*)",
-      "destination": "/frontend/$1"
+      "source": "/static/:path*",
+      "destination": "/frontend/static/:path*"
     },
     {
       "source": "/guide",
       "destination": "/frontend/guide.html"
     },
     {
-      "source": "/(.*)",
-      "destination": "/frontend/$1"
+      "source": "/:path*",
+      "destination": "/frontend/:path*"
     }
   ]
 }

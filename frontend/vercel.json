@@ -2,8 +2,8 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/static/(.*)",
-      "destination": "/$1"
+      "source": "/static/:path*",
+      "destination": "/static/:path*"
     }
   ]
 }
