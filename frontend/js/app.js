@@ -271,11 +271,11 @@
       socket.onerror = () => {
         clearTimeout(authTimer);
         if (location.protocol === "https:") {
-          toast("⚠️ Browser blocked ws:// from HTTPS. Enable 'Insecure Content' in Site Settings.", true);
+          toast("⚠️ WebREPL connection failed (Brave Shields or Mixed Content).", true);
           showAlert({
-            title: "Mixed Content Blocked by Browser",
-            summary: `Browser blocked unencrypted WebSocket ws://${cleanHost}:8266 from https:// origin.`,
-            fix: "In Brave/Chrome: Click the Tune/Lock icon next to URL -> Site settings -> Insecure content: Allow -> Reload page.",
+            title: "Local Wi-Fi Connection Blocked",
+            summary: `Could not connect to ws://${cleanHost}:8266 from https:// origin.`,
+            fix: "In Brave: Click the Orange Lion icon in URL bar -> Turn Shields OFF for this site. Also ensure 'Insecure content: Allow' is set in Site settings.",
           });
         } else {
           toast(`Could not connect to WebREPL at ${cleanHost}:8266. Check Wi-Fi and IP.`, true);
